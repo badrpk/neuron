@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+project(neuron VERSION 0.5.0 LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+add_executable(neuron src/neuron.cpp)
+target_compile_options(neuron PRIVATE -Wall -Wextra -Wpedantic)
