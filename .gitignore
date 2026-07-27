@@ -1,0 +1,5 @@
+build/
+neuron
+*.o
+research_results_v5.csv
+.DS_Store
