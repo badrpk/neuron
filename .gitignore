@@ -1,5 +1,14 @@
 build/
-neuron
+cmake-build*/
+CMakeCache.txt
+CMakeFiles/
 *.o
-research_results_v5.csv
-.DS_Store
+*.obj
+*.a
+*.so
+*.exe
+.idea/
+.vscode/
+*.log
+*.bak
+*.bak_*
