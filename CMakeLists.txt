@@ -21,6 +21,7 @@ add_library(
 
 add_executable(
     neuron
+    src/neuron.cpp
     src/neuron_engine.cpp
 )
 
