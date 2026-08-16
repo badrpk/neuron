@@ -1,82 +1,137 @@
-#include "nifdu/spiking_weight_importer.hpp"
+#include "neuron/spiking_weight_importer.hpp"
+
+#include <algorithm>
 #include <cmath>
 #include <sstream>
-#include <iostream>
-#include <algorithm>
+#include <stdexcept>
 
-namespace nifdu {
+namespace neuron {
 
 SpikingWeightImporter::SpikingWeightImporter(int vocab_size, int hidden_dim)
     : vocab_size_(vocab_size), hidden_dim_(hidden_dim)
 {
-    stdp_synaptic_matrix_.assign(1000, std::vector<double>(1000, 0.1));
+    if (vocab_size_ <= 0) {
+        throw std::invalid_argument("vocab_size must be positive");
+    }
+    if (hidden_dim_ <= 0) {
+        throw std::invalid_argument("hidden_dim must be positive");
+    }
+    stdp_synaptic_matrix_.assign(
+        kMaxSynapses,
+        std::vector<double>(kMaxSynapses, 0.1)
+    );
 }
 
-bool SpikingWeightImporter::import_from_dense_weights(const std::vector<float>& dense_weights, int rows, int cols) {
-    if (dense_weights.empty()) return false;
-    
-    // Map floating-point dense attention weights into LIF spike threshold / synaptic weights: W_snn = tanh(W_dense)
-    int count = 0;
-    for (int r = 0; r < rows && r < 1000; ++r) {
-        for (int c = 0; c < cols && c < 1000; ++c) {
-            float w = dense_weights[r * cols + c];
-            stdp_synaptic_matrix_[r][c] = std::tanh(w) * 0.8;
-            count++;
+bool SpikingWeightImporter::import_from_dense_weights(
+    const std::vector<float>& dense_weights,
+    int rows,
+    int cols
+) {
+    if (rows <= 0 || cols <= 0) {
+        throw std::invalid_argument("rows and cols must be positive");
+    }
+    const auto expected = static_cast<size_t>(rows) * static_cast<size_t>(cols);
+    if (dense_weights.size() != expected) {
+        throw std::invalid_argument("dense_weights size does not match rows * cols");
+    }
+
+    const int bounded_rows = std::min(rows, kMaxSynapses);
+    const int bounded_cols = std::min(cols, kMaxSynapses);
+    for (int r = 0; r < bounded_rows; ++r) {
+        for (int c = 0; c < bounded_cols; ++c) {
+            const float weight = dense_weights[
+                static_cast<size_t>(r) * static_cast<size_t>(cols) +
+                static_cast<size_t>(c)
+            ];
+            stdp_synaptic_matrix_[r][c] = std::tanh(weight) * 0.8;
         }
     }
-    return count > 0;
+    return bounded_rows > 0 && bounded_cols > 0;
 }
 
-void SpikingWeightImporter::train_stdp_on_text(const std::string& text_corpus, int epochs) {
-    std::stringstream ss(text_corpus);
-    std::string word;
+void SpikingWeightImporter::train_stdp_on_text(
+    const std::string& text_corpus,
+    int epochs
+) {
+    if (epochs < 0) {
+        throw std::invalid_argument("epochs must be non-negative");
+    }
+
+    std::stringstream stream(text_corpus);
+    std::string token;
     std::vector<std::string> tokens;
-    
-    while (ss >> word) {
-        tokens.push_back(word);
-        if (std::find(id_to_token_.begin(), id_to_token_.end(), word) == id_to_token_.end()) {
-            id_to_token_.push_back(word);
+
+    while (stream >> token) {
+        tokens.push_back(token);
+        auto found = vocab_map_.find(token);
+        if (found == vocab_map_.end()) {
+            if (static_cast<int>(id_to_token_.size()) >= std::min(vocab_size_, kMaxSynapses)) {
+                continue;
+            }
+            const int id = static_cast<int>(id_to_token_.size());
+            id_to_token_.push_back(token);
+            vocab_map_.emplace(
+                token,
+                TokenSpikeMapping{token, id, {}}
+            );
         }
     }
-    
-    // STDP (Spike-Timing-Dependent Plasticity) Weight Adjustment Loop: Delta_W = A * exp(-Delta_t / tau)
-    for (int ep = 0; ep < epochs; ++ep) {
+
+    const double potentiation = 0.05 * std::exp(-1.0 / 20.0);
+    for (int epoch = 0; epoch < epochs; ++epoch) {
         for (size_t i = 0; i + 1 < tokens.size(); ++i) {
-            auto it1 = std::find(id_to_token_.begin(), id_to_token_.end(), tokens[i]);
-            auto it2 = std::find(id_to_token_.begin(), id_to_token_.end(), tokens[i+1]);
-            if (it1 != id_to_token_.end() && it2 != id_to_token_.end()) {
-                int id1 = std::distance(id_to_token_.begin(), it1) % 1000;
-                int id2 = std::distance(id_to_token_.begin(), it2) % 1000;
-                
-                // STDP Potentiation
-                stdp_synaptic_matrix_[id1][id2] += 0.05 * std::exp(-1.0 / 20.0);
+            const auto first = vocab_map_.find(tokens[i]);
+            const auto second = vocab_map_.find(tokens[i + 1]);
+            if (first == vocab_map_.end() || second == vocab_map_.end()) {
+                continue;
             }
+            stdp_synaptic_matrix_[first->second.token_id][second->second.token_id] += potentiation;
         }
     }
 }
 
-std::string SpikingWeightImporter::predict_next_token_spiking(const std::string& prompt) {
-    std::stringstream ss(prompt);
-    std::string word, last_word;
-    while (ss >> word) last_word = word;
-    
-    auto it = std::find(id_to_token_.begin(), id_to_token_.end(), last_word);
-    if (it != id_to_token_.end()) {
-        int id1 = std::distance(id_to_token_.begin(), it) % 1000;
-        int max_id = 0;
-        double max_w = -1.0;
-        for (int j = 0; j < (int)id_to_token_.size() && j < 1000; ++j) {
-            if (stdp_synaptic_matrix_[id1][j] > max_w) {
-                max_w = stdp_synaptic_matrix_[id1][j];
-                max_id = j;
-            }
-        }
-        if (max_id < (int)id_to_token_.size()) {
-            return id_to_token_[max_id];
+std::string SpikingWeightImporter::predict_next_token_spiking(
+    const std::string& prompt
+) const {
+    std::stringstream stream(prompt);
+    std::string token;
+    std::string last_token;
+    while (stream >> token) {
+        last_token = token;
+    }
+
+    const auto found = vocab_map_.find(last_token);
+    if (found == vocab_map_.end()) {
+        return {};
+    }
+
+    const int from_id = found->second.token_id;
+    int best_id = -1;
+    double best_weight = -1.0;
+    for (int to_id = 0; to_id < static_cast<int>(id_to_token_.size()); ++to_id) {
+        const double weight = stdp_synaptic_matrix_[from_id][to_id];
+        if (weight > best_weight) {
+            best_weight = weight;
+            best_id = to_id;
         }
     }
-    
-    return "intelligence";
+
+    return best_id >= 0 ? id_to_token_[best_id] : std::string{};
 }
 
-} // namespace nifdu
+int SpikingWeightImporter::vocabulary_size() const noexcept {
+    return static_cast<int>(id_to_token_.size());
+}
+
+double SpikingWeightImporter::synaptic_weight(
+    int from_token_id,
+    int to_token_id
+) const {
+    if (from_token_id < 0 || from_token_id >= kMaxSynapses ||
+        to_token_id < 0 || to_token_id >= kMaxSynapses) {
+        throw std::out_of_range("token id is outside synaptic matrix bounds");
+    }
+    return stdp_synaptic_matrix_[from_token_id][to_token_id];
+}
+
+} // namespace neuron
