@@ -1,0 +1,31 @@
+name: Neuron native tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'include/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/native-tests.yml'
+  pull_request:
+    paths:
+      - 'include/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/native-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
