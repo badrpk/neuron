@@ -1,84 +1,83 @@
-# neuron 🧠 — Spiking Neural Network (SNN) Biological LLM Engine
+# Neuron — Biological Intelligence Engine
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Language: C++17/20](https://img.shields.io/badge/Language-C%2B%2B17%2F20-blue.svg)](https://isocpp.org/)
-[![Build: Vectorized SIMD](https://img.shields.io/badge/Build--Flags--O3-AVX2%20SIMD-green.svg)](https://gcc.gnu.org/)
+**Experimental native C++ spiking-neural intelligence built around temporal dynamics, STDP learning, and low-overhead event-driven computation.**
 
-`neuron` is an experimental high-performance C++17/C++20 **Spiking Neural Network (SNN) Biological LLM Engine**. It provides a non-Transformer artificial intelligence paradigm designed to replace or hybridize dense matrix attention models.
+Neuron is the **biological intelligence** component of the Shmry Software Inc ecosystem. The repository name remains `neuron`; `neutron` is accepted as an ecosystem alias.
 
-Unlike traditional Transformer LLMs (which require massive FP32/FP16 matrix multiplications and gigabytes of VRAM), `neuron` processes temporal information using **Biological Leaky Integrate-and-Fire (LIF) Pulse Dynamics**, **Synaptic STDP Plasticity**, and **Inter-Spike Interval (ISI) Phase-Locking**.
+## One-command install
 
----
-
-### 📊 Benchmark Summary: Dense LLM vs. Neuron Spiking SNN
-
-Empirical comparison against a 7 Billion Parameter Dense Transformer LLM baseline (`test_compare_spiking_llm`):
-
-| Metric | **7B Dense Transformer LLM** | **Neuron Spiking SNN LLM** | **Performance Advantage** |
-|---|---|---|---|
-| **Generation Latency (50 Tokens)** | `1,663.97 ms` | **`115.11 ms`** | ⚡ **14.5x FASTER** |
-| **Generation Throughput** | `30.05 tokens/sec` | **`434.36 tokens/sec`** | 🚀 **14.5x Throughput** |
-| **Memory Footprint** | `14,336 MB` VRAM | **`12.5 MB` RAM** | 💾 **1,146.9x RAM Shrinkage** |
-| **Energy Consumption** | `582.4 Joules` (350W GPU) | **`1.73 Joules`** (15W CPU) | 🔋 **337.3x Less Energy (99.7% Drop)** |
-| **Math Operation Class** | FP32 Dense Matrix Multiplication | **Sparse Event Pulse Additions (+1)** | 🧮 Zero Floating Point Mults |
-
----
-
-### 🧪 100-Question Quality & Precision Audit
-
-Across a 100-question multi-domain quality evaluation (`test_100_questions_quality_comparison`), `neuron` demonstrated superior answer precision and near-zero hallucination rates:
-
-- **Average Response Quality Score:** **92.41%** (vs 82.35% for Dense LLM)
-- **Hallucination Rate:** **0.8%** (vs 11.4% for Dense LLM)
-- **Average Generation Latency:** **94.80 ms / prompt** (vs 1,412.50 ms)
-
----
-
-### 🔬 Emergent Scientific Discoveries at Scale
-
-When running ultra-scale simulation loops (1,000,000 to 10,000,000 steps at **`0.000153 ms` per loop**), `neuron` revealed 3 emergent biological phenomena:
-
-1. **Self-Stabilizing Resonant Attractors (Zero Motor Collapse):** Motor usage entropy stays locked at **`3.20 bits`** with zero representation collapse.
-2. **Phase-Locked Harmonic Synchronization:** Hidden layer spiking neurons spontaneously synchronize into oscillatory wave bands (similar to human brain Gamma rhythms).
-3. **99.1% Noise Immunity:** Perturbation noise immunity increases over time as temporal spike phases lock.
-
----
-
-### 🛠️ Quickstart & Build Instructions
-
-#### Prerequisites
-- C++17 or C++20 compliant compiler (`g++ >= 9.0` or `clang++`)
-- `cmake >= 3.20`
-
-#### Build Command
+Linux, macOS, WSL, ChromeOS Linux, Termux, and other Unix-like systems with Git, CMake, and a C++17/20 compiler:
 
 ```bash
-# 1. Clone Repository
-git clone https://github.com/badrpk/neuron.git
-cd neuron
-
-# 2. Build with CMake (-O3 vectorized SIMD)
-mkdir -p build && cd build
-cmake ..
-make -j$(nproc)
-
-# 3. Run Comparative LLM Benchmark
-./test_compare_spiking_llm
+curl -fsSL https://raw.githubusercontent.com/badrpk/neuron/main/install.sh | bash
 ```
 
----
+Windows PowerShell with Git, CMake, and a supported C++ toolchain:
 
-### 🤝 How to Contribute & Improve `neuron`
+```powershell
+irm https://raw.githubusercontent.com/badrpk/neuron/main/install.ps1 | iex
+```
 
-We welcome contributions from computational neuroscientists, C++ systems developers, and AI researchers!
+The installers build from source and refuse to overwrite a dirty existing checkout.
 
-#### Recommended Contribution Areas:
-1. **SIMD AVX-512 / ARM Neon Intrinsics:** Accelerate `step_simulation()` membrane update loops.
-2. **STDP Plasticity Rules:** Extend Spike-Timing-Dependent Plasticity for unsupervised vocabulary embeddings.
-3. **Neuromorphic Hardware Backends:** Add support for Intel Loihi, SpiNNaker, and Apple Neural Engine.
+## What Neuron implements
 
----
+Neuron explores a non-Transformer intelligence path based on:
 
-### 📜 License
+- Leaky Integrate-and-Fire (LIF) pulse dynamics
+- Spike-Timing-Dependent Plasticity (STDP)
+- temporal/spiking state
+- event-driven neural updates
+- embedding and learning support
+- native C++ execution
 
-MIT License © 2026 Badar Parkhani (`badrpk`) & Open-Source Contributors.
+The project is experimental. Benchmark figures in this repository should be interpreted as results from the specific included tests and configurations, not universal claims about all dense language models or all hardware.
+
+## Quick start from source
+
+```bash
+git clone https://github.com/badrpk/neuron.git
+cd neuron
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+```
+
+Then run the test/benchmark binaries generated by the current CMake configuration.
+
+## Shmry Software Inc ecosystem
+
+| Product | Role |
+|---|---|
+| Shmry | Cloud + email server |
+| Xerus | Disk-first memory |
+| VPS | Native TLS/SNI webserver |
+| HuobzLang | Highest-level compact language |
+| **Neuron** | **Biological intelligence** |
+| Nifdu | Screenshot-loop harness |
+| Sophyane | Multi-option engineering harness |
+
+Neuron can request peer capabilities when needed—for example compact semantic representation from HuobzLang, persistent memory from Xerus, cloud/storage from Shmry, or orchestration from Sophyane.
+
+## Ecosystem contract
+
+See [`ecosystem.json`](ecosystem.json).
+
+## Platform verification
+
+The installer entrypoints are cross-platform dispatchers, but a platform is considered verified only when CMake configuration, compilation, and the relevant tests succeed on that host/toolchain. SIMD-specific paths may require architecture-specific fallbacks.
+
+## Contributing
+
+Useful contribution areas include:
+
+- ARM NEON / AVX2 / AVX-512 portability
+- STDP plasticity rules
+- neuromorphic backends
+- deterministic tests and benchmark methodology
+- HuobzLang representation integration
+- Xerus persistent-memory integration
+- Sophyane/Nifdu runtime interoperability
+
+## License
+
+MIT License © 2026 Badar Parkhani (`badrpk`) and contributors.
