@@ -1,12 +1,13 @@
-#ifndef NIFDU_SPIKING_WEIGHT_IMPORTER_HPP
-#define NIFDU_SPIKING_WEIGHT_IMPORTER_HPP
+#ifndef NEURON_SPIKING_WEIGHT_IMPORTER_HPP
+#define NEURON_SPIKING_WEIGHT_IMPORTER_HPP
 
-#include <vector>
 #include <string>
 #include <unordered_map>
-#include "nifdu/neuron_engine.hpp"
+#include <vector>
 
-namespace nifdu {
+#include "neuron/neuron_engine.hpp"
+
+namespace neuron {
 
 struct TokenSpikeMapping {
     std::string token;
@@ -17,17 +18,23 @@ struct TokenSpikeMapping {
 class SpikingWeightImporter {
 public:
     SpikingWeightImporter(int vocab_size = 32000, int hidden_dim = 512);
-    
-    // Convert trained dense weight matrices into LIF spiking synaptic connection weights
-    bool import_from_dense_weights(const std::vector<float>& dense_weights, int rows, int cols);
-    
-    // STDP (Spike-Timing-Dependent Plasticity) Natural Language Training Pass
+
+    bool import_from_dense_weights(
+        const std::vector<float>& dense_weights,
+        int rows,
+        int cols
+    );
+
     void train_stdp_on_text(const std::string& text_corpus, int epochs = 5);
-    
-    // Predict next token using LIF spiking frequency activation
-    std::string predict_next_token_spiking(const std::string& prompt);
+
+    std::string predict_next_token_spiking(const std::string& prompt) const;
+
+    int vocabulary_size() const noexcept;
+    double synaptic_weight(int from_token_id, int to_token_id) const;
 
 private:
+    static constexpr int kMaxSynapses = 1000;
+
     int vocab_size_;
     int hidden_dim_;
     std::unordered_map<std::string, TokenSpikeMapping> vocab_map_;
@@ -35,6 +42,6 @@ private:
     std::vector<std::vector<double>> stdp_synaptic_matrix_;
 };
 
-} // namespace nifdu
+} // namespace neuron
 
-#endif // NIFDU_SPIKING_WEIGHT_IMPORTER_HPP
+#endif // NEURON_SPIKING_WEIGHT_IMPORTER_HPP
