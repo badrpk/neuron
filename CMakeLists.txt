@@ -9,24 +9,35 @@ project(
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-include_directories(include)
-
-add_compile_options(-O3 -march=native -ffast-math)
+enable_testing()
 
 add_library(
     neuron_core
     src/neuron_engine.cpp
+    src/spiking_weight_importer.cpp
 )
 
-add_executable(
-    neuron
-    src/neuron.cpp
-    src/neuron_engine.cpp
-)
+target_include_directories(neuron_core PUBLIC include)
+target_compile_options(neuron_core PRIVATE -O2)
+
+add_executable(neuron src/neuron.cpp)
+target_link_libraries(neuron PRIVATE neuron_core)
 
 add_executable(
     test_compare_spiking_llm
     tests/test_compare_spiking_llm_vs_dense_transformer.cpp
-    src/neuron_engine.cpp
+)
+target_link_libraries(test_compare_spiking_llm PRIVATE neuron_core)
+
+add_executable(
+    test_spiking_weight_importer
+    tests/test_spiking_weight_importer.cpp
+)
+target_link_libraries(test_spiking_weight_importer PRIVATE neuron_core)
+
+add_test(
+    NAME neuron_spiking_weight_importer
+    COMMAND test_spiking_weight_importer
 )
