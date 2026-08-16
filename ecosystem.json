@@ -1,0 +1,20 @@
+{
+  "schema": "sophyane-ecosystem-v1",
+  "component": "neuron",
+  "role": "biological-intelligence",
+  "aliases": ["neutron"],
+  "capabilities": ["biological-intelligence", "learning", "neural-adaptation", "stdp", "embedding-support"],
+  "peers": {
+    "shmry": "cloud-email-server",
+    "xerus": "disk-first-memory",
+    "vps": "webserver",
+    "huobzlang": "highest-level-language",
+    "nifdu": "screenshot-loop-harness",
+    "sophyane": "multi-option-harness"
+  },
+  "routing": {
+    "policy": "request-peer-capability-when-local-capability-is-missing",
+    "transport": ["local-process", "http-json", "https-json"],
+    "fallback": "return-explicit-capability-unavailable"
+  }
+}
