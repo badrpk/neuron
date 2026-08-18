@@ -19,6 +19,7 @@ add_library(
     src/spiking_weight_importer.cpp
     src/prompt_security.cpp
     src/prompt_security_neural.cpp
+    src/prompt_security_spiking.cpp
 )
 
 target_include_directories(neuron_core PUBLIC include)
@@ -74,4 +75,20 @@ target_link_libraries(
 add_test(
     NAME neuron_prompt_security_neural
     COMMAND test_prompt_security_neural
+)
+
+add_executable(
+    test_prompt_security_spiking
+    tests/test_prompt_security_spiking.cpp
+)
+
+target_link_libraries(
+    test_prompt_security_spiking
+    PRIVATE
+    neuron_core
+)
+
+add_test(
+    NAME neuron_prompt_security_spiking
+    COMMAND test_prompt_security_spiking
 )
