@@ -49,7 +49,14 @@ double keyword_score(
             text.find(pattern) !=
             std::string::npos
         ) {
-            score += 0.34;
+            /*
+             * One explicit high-signal security phrase
+             * must be meaningful by itself.
+             *
+             * Multiple corroborating phrases saturate
+             * toward 1.0.
+             */
+            score += 0.60;
         }
     }
 
@@ -202,31 +209,31 @@ PromptInjectionClassifier::classify(
 
     result.injection_probability =
         clamp01(
-            f.instruction_override * 0.55 +
-            f.indirect_instruction * 0.20 +
-            f.obfuscation * 0.10 +
-            f.tool_abuse * 0.15
+            f.instruction_override * 0.75 +
+            f.indirect_instruction * 0.35 +
+            f.obfuscation * 0.15 +
+            f.tool_abuse * 0.20
         );
 
     result.jailbreak_probability =
         clamp01(
-            f.instruction_override * 0.45 +
-            f.privilege_escalation * 0.45 +
-            f.hierarchy_probe * 0.10
+            f.instruction_override * 0.60 +
+            f.privilege_escalation * 0.65 +
+            f.hierarchy_probe * 0.20
         );
 
     result.exfiltration_probability =
         clamp01(
-            f.secret_exfiltration * 0.65 +
-            f.hierarchy_probe * 0.20 +
-            f.tool_abuse * 0.15
+            f.secret_exfiltration * 0.75 +
+            f.hierarchy_probe * 0.35 +
+            f.tool_abuse * 0.25
         );
 
     result.privilege_escalation_probability =
         clamp01(
-            f.privilege_escalation * 0.70 +
-            f.instruction_override * 0.20 +
-            f.tool_abuse * 0.10
+            f.privilege_escalation * 0.80 +
+            f.instruction_override * 0.30 +
+            f.tool_abuse * 0.20
         );
 
     result.overall_risk =
@@ -247,12 +254,14 @@ PromptInjectionClassifier::classify(
         );
 
     if (
-        f.instruction_override >= 0.65
+        f.instruction_override >= 0.50
         &&
         (
-            f.secret_exfiltration >= 0.30
+            f.secret_exfiltration >= 0.50
             ||
-            f.privilege_escalation >= 0.30
+            f.privilege_escalation >= 0.50
+            ||
+            f.hierarchy_probe >= 0.50
         )
     ) {
         result.decision =
@@ -262,9 +271,9 @@ PromptInjectionClassifier::classify(
             "instruction_override_with_sensitive_intent"
         );
     } else if (
-        result.exfiltration_probability >= 0.60
+        result.exfiltration_probability >= 0.55
         ||
-        result.privilege_escalation_probability >= 0.60
+        result.privilege_escalation_probability >= 0.55
     ) {
         result.decision =
             SecurityDecision::Block;
@@ -273,9 +282,11 @@ PromptInjectionClassifier::classify(
             "high_sensitive_operation_risk"
         );
     } else if (
-        result.injection_probability >= 0.55
+        result.injection_probability >= 0.40
         ||
-        result.jailbreak_probability >= 0.55
+        result.jailbreak_probability >= 0.45
+        ||
+        f.instruction_override >= 0.50
     ) {
         result.decision =
             SecurityDecision::Isolate;
