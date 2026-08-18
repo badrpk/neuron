@@ -119,3 +119,14 @@ add_test(
     NAME neuron_prompt_security_v32
     COMMAND test_prompt_security_v32
 )
+
+add_executable(
+    benchmark_prompt_security_heldout
+    tests/benchmark_prompt_security_heldout.cpp
+)
+
+target_link_libraries(
+    benchmark_prompt_security_heldout
+    PRIVATE
+    neuron_core
+)
