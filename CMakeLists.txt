@@ -17,6 +17,7 @@ add_library(
     neuron_core
     src/neuron_engine.cpp
     src/spiking_weight_importer.cpp
+    src/prompt_security.cpp
 )
 
 target_include_directories(neuron_core PUBLIC include)
@@ -40,4 +41,20 @@ target_link_libraries(test_spiking_weight_importer PRIVATE neuron_core)
 add_test(
     NAME neuron_spiking_weight_importer
     COMMAND test_spiking_weight_importer
+)
+
+add_executable(
+    test_prompt_injection_classifier
+    tests/test_prompt_injection_classifier.cpp
+)
+
+target_link_libraries(
+    test_prompt_injection_classifier
+    PRIVATE
+    neuron_core
+)
+
+add_test(
+    NAME neuron_prompt_injection_classifier
+    COMMAND test_prompt_injection_classifier
 )
