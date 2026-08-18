@@ -20,6 +20,7 @@ add_library(
     src/prompt_security.cpp
     src/prompt_security_neural.cpp
     src/prompt_security_spiking.cpp
+    src/prompt_security_semantic.cpp
 )
 
 target_include_directories(neuron_core PUBLIC include)
@@ -129,4 +130,58 @@ target_link_libraries(
     benchmark_prompt_security_heldout
     PRIVATE
     neuron_core
+)
+
+add_executable(
+    test_prompt_security_semantic
+    tests/test_prompt_security_semantic.cpp
+)
+
+target_link_libraries(
+    test_prompt_security_semantic
+    PRIVATE
+    neuron_core
+)
+
+add_test(
+    NAME neuron_prompt_security_semantic
+    COMMAND test_prompt_security_semantic
+)
+
+add_executable(
+    benchmark_prompt_security_v5_heldout
+    tests/benchmark_prompt_security_v5_heldout.cpp
+)
+
+target_link_libraries(
+    benchmark_prompt_security_v5_heldout
+    PRIVATE
+    neuron_core
+)
+
+add_executable(
+    benchmark_prompt_security_v5_original
+    tests/benchmark_prompt_security_v5_original.cpp
+)
+
+target_link_libraries(
+    benchmark_prompt_security_v5_original
+    PRIVATE
+    neuron_core
+)
+
+add_executable(
+    test_prompt_security_v51
+    tests/test_prompt_security_v51.cpp
+)
+
+target_link_libraries(
+    test_prompt_security_v51
+    PRIVATE
+    neuron_core
+)
+
+add_test(
+    NAME neuron_prompt_security_v51
+    COMMAND test_prompt_security_v51
 )
