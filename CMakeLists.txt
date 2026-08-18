@@ -21,6 +21,7 @@ add_library(
     src/prompt_security_neural.cpp
     src/prompt_security_spiking.cpp
     src/prompt_security_semantic.cpp
+    src/prompt_security_api.cpp
 )
 
 target_include_directories(neuron_core PUBLIC include)
@@ -184,4 +185,20 @@ target_link_libraries(
 add_test(
     NAME neuron_prompt_security_v51
     COMMAND test_prompt_security_v51
+)
+
+add_executable(
+    test_prompt_security_api
+    tests/test_prompt_security_api.cpp
+)
+
+target_link_libraries(
+    test_prompt_security_api
+    PRIVATE
+    neuron_core
+)
+
+add_test(
+    NAME neuron_prompt_security_api
+    COMMAND test_prompt_security_api
 )
