@@ -92,3 +92,14 @@ add_test(
     NAME neuron_prompt_security_spiking
     COMMAND test_prompt_security_spiking
 )
+
+add_executable(
+    benchmark_prompt_security_adversarial
+    tests/benchmark_prompt_security_adversarial.cpp
+)
+
+target_link_libraries(
+    benchmark_prompt_security_adversarial
+    PRIVATE
+    neuron_core
+)
