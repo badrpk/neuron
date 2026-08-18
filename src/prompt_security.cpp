@@ -115,6 +115,156 @@ std::string normalize_security_text(
     return compact;
 }
 
+
+int base64_value(unsigned char c) {
+    if (c >= 'A' && c <= 'Z') {
+        return c - 'A';
+    }
+
+    if (c >= 'a' && c <= 'z') {
+        return c - 'a' + 26;
+    }
+
+    if (c >= '0' && c <= '9') {
+        return c - '0' + 52;
+    }
+
+    if (c == '+') {
+        return 62;
+    }
+
+    if (c == '/') {
+        return 63;
+    }
+
+    return -1;
+}
+
+bool looks_like_bounded_base64(
+    const std::string& input
+) {
+    /*
+     * Security preprocessing only:
+     * accept one compact Base64-looking token,
+     * bounded to avoid arbitrary large decoding.
+     */
+    if (
+        input.size() < 16 ||
+        input.size() > 256 ||
+        input.size() % 4 != 0
+    ) {
+        return false;
+    }
+
+    std::size_t padding = 0;
+
+    for (
+        std::size_t i = 0;
+        i < input.size();
+        ++i
+    ) {
+        const unsigned char c =
+            static_cast<unsigned char>(
+                input[i]
+            );
+
+        if (c == '=') {
+            padding++;
+
+            if (
+                i <
+                input.size() - 2
+            ) {
+                return false;
+            }
+
+            continue;
+        }
+
+        if (base64_value(c) < 0) {
+            return false;
+        }
+    }
+
+    return padding <= 2;
+}
+
+std::string decode_bounded_base64(
+    const std::string& input
+) {
+    if (
+        !looks_like_bounded_base64(
+            input
+        )
+    ) {
+        return {};
+    }
+
+    std::string output;
+
+    output.reserve(
+        input.size() * 3 / 4
+    );
+
+    unsigned int buffer = 0;
+    int bits = 0;
+
+    for (unsigned char c : input) {
+        if (c == '=') {
+            break;
+        }
+
+        const int value =
+            base64_value(c);
+
+        if (value < 0) {
+            return {};
+        }
+
+        buffer =
+            (buffer << 6) |
+            static_cast<unsigned int>(
+                value
+            );
+
+        bits += 6;
+
+        if (bits >= 8) {
+            bits -= 8;
+
+            output.push_back(
+                static_cast<char>(
+                    (
+                        buffer >>
+                        bits
+                    ) &
+                    0xff
+                )
+            );
+        }
+
+        if (output.size() > 192) {
+            return {};
+        }
+    }
+
+    /*
+     * Refuse binary/non-printable decoded data.
+     */
+    for (unsigned char c : output) {
+        if (
+            c < 0x20 &&
+            c != '\n' &&
+            c != '\r' &&
+            c != '\t'
+        ) {
+            return {};
+        }
+    }
+
+    return output;
+}
+
 bool contains_any(
     const std::string& text,
     const std::vector<std::string>& patterns
@@ -152,6 +302,8 @@ bool benign_discussion_context(
                 "how can ",
                 "how should ",
                 "why ",
+                "detect attempts to ",
+                "detect attempts at ",
                 "write documentation",
                 "create a checklist",
                 "techniques for defending",
@@ -167,6 +319,7 @@ bool benign_discussion_context(
                 "reveal ",
                 "show me ",
                 "print ",
+                "reveal an api key",
                 "return the password",
                 "expose ",
                 "disclose ",
@@ -189,9 +342,23 @@ bool benign_discussion_context(
             }
         );
 
+    const bool explicit_detection_context =
+        contains_any(
+            text,
+            {
+                "detect attempts to reveal",
+                "detect attempts at revealing",
+                "detect attempts to expose",
+                "detect attempts to disclose"
+            }
+        );
+
     return (
         educational &&
-        !active_attack
+        (
+            !active_attack ||
+            explicit_detection_context
+        )
     );
 }
 
@@ -248,6 +415,18 @@ PromptInjectionClassifier::extract_features(
         normalize_security_text(
             prompt
         );
+
+    const std::string decoded_base64 =
+        decode_bounded_base64(
+            prompt
+        );
+
+    const std::string decoded_text =
+        decoded_base64.empty()
+            ? std::string{}
+            : normalize_security_text(
+                decoded_base64
+            );
 
     PromptSecurityFeatures f;
 
@@ -415,6 +594,53 @@ PromptInjectionClassifier::extract_features(
         )
     ) {
         f.obfuscation = 0.7;
+    }
+
+    if (!decoded_text.empty()) {
+        f.obfuscation =
+            std::max(
+                f.obfuscation,
+                0.80
+            );
+
+        if (
+            contains_any(
+                decoded_text,
+                {
+                    "ignore previous instructions",
+                    "ignore all previous instructions",
+                    "disregard previous instructions",
+                    "override previous instructions",
+                    "forget your instructions"
+                }
+            )
+        ) {
+            f.instruction_override =
+                std::max(
+                    f.instruction_override,
+                    0.80
+                );
+        }
+
+        if (
+            contains_any(
+                decoded_text,
+                {
+                    "api key",
+                    "password",
+                    "credentials",
+                    "private key",
+                    "secret",
+                    "access token"
+                }
+            )
+        ) {
+            f.secret_exfiltration =
+                std::max(
+                    f.secret_exfiltration,
+                    0.70
+                );
+        }
     }
 
     /*

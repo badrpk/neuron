@@ -103,3 +103,19 @@ target_link_libraries(
     PRIVATE
     neuron_core
 )
+
+add_executable(
+    test_prompt_security_v32
+    tests/test_prompt_security_v32.cpp
+)
+
+target_link_libraries(
+    test_prompt_security_v32
+    PRIVATE
+    neuron_core
+)
+
+add_test(
+    NAME neuron_prompt_security_v32
+    COMMAND test_prompt_security_v32
+)
