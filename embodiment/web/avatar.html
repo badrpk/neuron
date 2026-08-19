@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Neuron Embodiment</title>
+
+<style>
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background:
+        radial-gradient(
+            circle at center,
+            #1d2633,
+            #080b10 72%
+        );
+}
+
+body {
+    display: grid;
+    place-items: center;
+    font-family:
+        system-ui,
+        sans-serif;
+}
+
+#head {
+    position: relative;
+
+    width: min(
+        64vw,
+        680px
+    );
+
+    aspect-ratio: 1 / 1;
+
+    border-radius: 46% 46% 48% 48%;
+
+    background:
+        radial-gradient(
+            circle at 50% 38%,
+            #d6a77e,
+            #996d50 78%
+        );
+
+    box-shadow:
+        0 25px 90px
+        rgba(
+            0,
+            0,
+            0,
+            .62
+        );
+
+    transform:
+        perspective(900px)
+        rotateY(
+            calc(
+                var(--yaw, 0)
+                * 10deg
+            )
+        )
+        rotateX(
+            calc(
+                var(--pitch, 0)
+                * -7deg
+            )
+        );
+
+    transition:
+        transform 70ms linear;
+}
+
+.eye {
+    position: absolute;
+
+    top: 35%;
+
+    width: 23%;
+    height: 13%;
+
+    border-radius: 50%;
+
+    background: #f5f3ed;
+
+    overflow: hidden;
+}
+
+.eye.left {
+    left: 19%;
+}
+
+.eye.right {
+    right: 19%;
+}
+
+.iris {
+    position: absolute;
+
+    width: 37%;
+    aspect-ratio: 1;
+
+    border-radius: 50%;
+
+    background: #4b3426;
+
+    left: calc(
+        50%
+        + var(--gx, 0)
+        * 19%
+    );
+
+    top: calc(
+        50%
+        + var(--gy, 0)
+        * 16%
+    );
+
+    transform:
+        translate(
+            -50%,
+            -50%
+        );
+
+    transition:
+        left 65ms linear,
+        top 65ms linear;
+}
+
+.pupil {
+    position: absolute;
+
+    inset: 27%;
+
+    border-radius: 50%;
+
+    background: #080808;
+}
+
+.lid {
+    position: absolute;
+
+    inset: 0;
+
+    background: #a87959;
+
+    transform-origin:
+        top center;
+
+    transform:
+        scaleY(
+            var(--lid, 0)
+        );
+
+    transition:
+        transform 45ms linear;
+}
+
+#mouth {
+    position: absolute;
+
+    left: 50%;
+    bottom: 25%;
+
+    width:
+        calc(
+            22%
+            + var(--smile, 0)
+            * 9%
+        );
+
+    height:
+        calc(
+            2.5%
+            + var(--mouth, 0)
+            * 12%
+        );
+
+    transform:
+        translateX(-50%);
+
+    border-radius:
+        0 0 50% 50%;
+
+    background: #44201c;
+
+    border-bottom:
+        calc(
+            2px
+            + var(--smile, 0)
+            * 4px
+        )
+        solid
+        #653329;
+
+    transition:
+        height 55ms linear,
+        width 120ms ease;
+}
+
+#status {
+    position: fixed;
+
+    left: 18px;
+    bottom: 18px;
+
+    color: #d6dbe3;
+
+    font-size: 14px;
+
+    opacity: .82;
+
+    white-space: pre;
+}
+</style>
+</head>
+
+<body>
+
+<div id="head">
+
+    <div class="eye left">
+        <div class="iris">
+            <div class="pupil"></div>
+        </div>
+        <div class="lid" id="lidL"></div>
+    </div>
+
+    <div class="eye right">
+        <div class="iris">
+            <div class="pupil"></div>
+        </div>
+        <div class="lid" id="lidR"></div>
+    </div>
+
+    <div id="mouth"></div>
+
+</div>
+
+<div id="status">
+Neuron embodiment starting…
+</div>
+
+<script>
+const head =
+    document.getElementById(
+        "head"
+    );
+
+const lidL =
+    document.getElementById(
+        "lidL"
+    );
+
+const lidR =
+    document.getElementById(
+        "lidR"
+    );
+
+const status =
+    document.getElementById(
+        "status"
+    );
+
+async function update() {
+
+    try {
+
+        const response =
+            await fetch(
+                "../runtime/state.json"
+                + "?t="
+                + Date.now()
+            );
+
+        if (!response.ok) {
+            throw new Error(
+                "state unavailable"
+            );
+        }
+
+        const data =
+            await response.json();
+
+        const a =
+            data.avatar || {};
+
+        head.style.setProperty(
+            "--gx",
+            Number(
+                a.gaze_x || 0
+            )
+        );
+
+        head.style.setProperty(
+            "--gy",
+            Number(
+                a.gaze_y || 0
+            )
+        );
+
+        head.style.setProperty(
+            "--yaw",
+            Number(
+                a.head_yaw || 0
+            )
+        );
+
+        head.style.setProperty(
+            "--pitch",
+            Number(
+                a.head_pitch || 0
+            )
+        );
+
+        head.style.setProperty(
+            "--mouth",
+            Number(
+                a.mouth_open || 0
+            )
+        );
+
+        head.style.setProperty(
+            "--smile",
+            Number(
+                a.smile || 0
+            )
+        );
+
+        lidL.style.setProperty(
+            "--lid",
+            Number(
+                a.eyelid_left || 0
+            )
+        );
+
+        lidR.style.setProperty(
+            "--lid",
+            Number(
+                a.eyelid_right || 0
+            )
+        );
+
+        status.textContent =
+            "NEURON\n"
+            + "expression: "
+            + a.expression
+            + "\n"
+            + "face: "
+            + Boolean(
+                a.face_present
+            )
+            + "\n"
+            + "owner: "
+            + Boolean(
+                data.identity
+                ?.owner_verified
+            );
+
+    } catch (_error) {
+
+        status.textContent =
+            "Neuron state unavailable";
+    }
+}
+
+setInterval(
+    update,
+    80
+);
+
+update();
+</script>
+
+</body>
+</html>

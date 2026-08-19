@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+
+<meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+>
+
+<title>Neuron</title>
+
+<style>
+:root {
+    color-scheme: dark;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+
+    background:
+        radial-gradient(
+            circle at center,
+            #152337 0%,
+            #070b12 50%,
+            #020306 100%
+        );
+
+    color: white;
+
+    font-family:
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+}
+
+#stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+
+    display: grid;
+    place-items: center;
+}
+
+.avatar {
+    position: relative;
+
+    width: 360px;
+    height: 360px;
+
+    display: grid;
+    place-items: center;
+
+    border-radius: 50%;
+
+    transition:
+        opacity 250ms ease,
+        transform 250ms ease,
+        filter 250ms ease;
+}
+
+.core {
+    width: 158px;
+    height: 158px;
+
+    border-radius: 50%;
+
+    background:
+        radial-gradient(
+            circle at 38% 32%,
+            #ffffff 0%,
+            #c8f4ff 8%,
+            #64d6ff 18%,
+            #2585c5 46%,
+            #07131e 75%
+        );
+
+    box-shadow:
+        0 0 22px rgba(160,230,255,.9),
+        0 0 65px rgba(65,180,255,.7),
+        0 0 140px rgba(30,120,200,.35);
+
+    animation:
+        breathe 2.6s ease-in-out infinite;
+}
+
+.ring {
+    position: absolute;
+
+    border-radius: 50%;
+
+    border:
+        2px solid rgba(120,215,255,.55);
+
+    pointer-events: none;
+}
+
+.ring.one {
+    width: 225px;
+    height: 225px;
+
+    animation:
+        clockwise 8s linear infinite;
+}
+
+.ring.two {
+    width: 290px;
+    height: 290px;
+
+    border-style: dashed;
+
+    opacity: .55;
+
+    animation:
+        counter 13s linear infinite;
+}
+
+.ring.three {
+    width: 340px;
+    height: 340px;
+
+    opacity: .22;
+
+    animation:
+        clockwise 20s linear infinite;
+}
+
+#state {
+    position: absolute;
+
+    top: calc(50% + 215px);
+
+    width: 100%;
+
+    text-align: center;
+
+    font-size: 13px;
+    font-weight: 650;
+
+    letter-spacing: .28em;
+
+    opacity: .88;
+}
+
+#message {
+    position: absolute;
+
+    left: 12%;
+    bottom: 42px;
+
+    width: 76%;
+
+    min-height: 48px;
+
+    text-align: center;
+
+    font-size: 18px;
+    line-height: 1.45;
+
+    opacity: .88;
+}
+
+#heard {
+    position: absolute;
+
+    top: 30px;
+    left: 10%;
+
+    width: 80%;
+
+    text-align: center;
+
+    font-size: 14px;
+
+    opacity: .62;
+}
+
+body.sleeping .avatar {
+    opacity: .25;
+    filter:
+        grayscale(.75)
+        brightness(.55);
+
+    transform: scale(.92);
+}
+
+body.sleeping .core {
+    animation: none;
+
+    box-shadow:
+        0 0 14px rgba(100,150,170,.28);
+}
+
+body.attentive .avatar {
+    transform: scale(1.08);
+}
+
+body.attentive .core {
+    animation:
+        attentive .65s ease-in-out infinite;
+
+    box-shadow:
+        0 0 32px #ffffff,
+        0 0 90px #55cfff,
+        0 0 180px rgba(35,150,230,.75);
+}
+
+body.engaged .core {
+    animation:
+        engaged 1.25s ease-in-out infinite;
+}
+
+body.listening .ring {
+    border-color:
+        rgba(100,255,190,.92);
+}
+
+body.listening .core {
+    box-shadow:
+        0 0 30px rgba(150,255,205,.95),
+        0 0 90px rgba(60,230,150,.65);
+}
+
+body.speaking .core {
+    animation:
+        speaking .38s ease-in-out infinite alternate;
+
+    box-shadow:
+        0 0 38px white,
+        0 0 100px #62dfff,
+        0 0 190px rgba(35,150,230,.75);
+}
+
+@keyframes breathe {
+    0%, 100% {
+        transform: scale(.97);
+    }
+
+    50% {
+        transform: scale(1.04);
+    }
+}
+
+@keyframes attentive {
+    0%, 100% {
+        transform: scale(.94);
+    }
+
+    50% {
+        transform: scale(1.13);
+    }
+}
+
+@keyframes engaged {
+    0%, 100% {
+        transform: scale(.98);
+    }
+
+    50% {
+        transform: scale(1.07);
+    }
+}
+
+@keyframes speaking {
+    from {
+        transform: scale(.98);
+    }
+
+    to {
+        transform: scale(1.09);
+    }
+}
+
+@keyframes clockwise {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes counter {
+    to {
+        transform: rotate(-360deg);
+    }
+}
+</style>
+</head>
+
+<body class="sleeping">
+
+<div id="stage">
+
+    <div id="heard"></div>
+
+    <div class="avatar">
+        <div class="ring three"></div>
+        <div class="ring two"></div>
+        <div class="ring one"></div>
+        <div class="core"></div>
+    </div>
+
+    <div id="state">
+        SLEEPING
+    </div>
+
+    <div id="message">
+        Say “Neuron”
+    </div>
+
+</div>
+
+<script>
+let lastVersion = -1;
+
+const knownStates = [
+    "sleeping",
+    "attentive",
+    "engaged",
+    "listening",
+    "speaking"
+];
+
+
+function applyState(data) {
+
+    if (
+        typeof data.version === "number"
+        &&
+        data.version === lastVersion
+    ) {
+        return;
+    }
+
+    lastVersion =
+        data.version ?? lastVersion;
+
+    for (
+        const state
+        of knownStates
+    ) {
+        document.body.classList.remove(
+            state
+        );
+    }
+
+    const state =
+        data.visual_state
+        || data.state
+        || "sleeping";
+
+    document.body.classList.add(
+        state
+    );
+
+    document.getElementById(
+        "state"
+    ).textContent =
+        String(
+            data.state
+            || state
+        ).toUpperCase();
+
+    document.getElementById(
+        "message"
+    ).textContent =
+        data.message
+        || "";
+
+    const heard =
+        data.heard
+        || "";
+
+    document.getElementById(
+        "heard"
+    ).textContent =
+        heard
+        ? `Heard: ${heard}`
+        : "";
+}
+
+
+async function refresh() {
+    try {
+        const response =
+            await fetch(
+                "/state",
+                {
+                    cache: "no-store"
+                }
+            );
+
+        if (!response.ok) {
+            return;
+        }
+
+        const data =
+            await response.json();
+
+        applyState(data);
+    }
+    catch (_) {
+    }
+}
+
+
+setInterval(
+    refresh,
+    250
+);
+
+refresh();
+</script>
+
+</body>
+</html>
