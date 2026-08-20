@@ -5,6 +5,10 @@ from dataclasses import dataclass
 import perception.screen_change as screen_change
 from perception.visual_region import PNGRegionCropper
 from perception.visual_targeting import VisualTargeting
+from runtime.security_boundary import (
+    InformationPermission,
+    default_security_boundary,
+)
 
 
 ScreenFingerprint = screen_change.ScreenFingerprint
@@ -279,6 +283,28 @@ class VerifiedVisualClick:
             )
         else:
             x, y = target.x, target.y
+
+        security = (
+            default_security_boundary()
+            .authorize(
+                source_text=instruction,
+                permission=(
+                    InformationPermission.EXECUTE
+                ),
+            )
+        )
+
+        if not security.allowed:
+            return VerifiedClickResult(
+                False,
+                target_label=target.label,
+                x=int(x),
+                y=int(y),
+                target_confidence=(
+                    target.confidence
+                ),
+                error="security_denied",
+            )
 
         click = self.motor.click(
             x=int(x),

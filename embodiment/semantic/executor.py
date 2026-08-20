@@ -3,6 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from semantic.plan import SemanticPlan
+from runtime.security_boundary import (
+    InformationPermission,
+    default_security_boundary,
+)
 from semantic.registry import CapabilityRegistry
 
 
@@ -70,6 +74,78 @@ class CapabilityExecutor:
                 continue
 
             try:
+
+                provenance = dict(
+                    getattr(
+                        step,
+                        "provenance",
+                        {},
+                    )
+                    or {}
+                )
+
+                if not provenance.get(
+                    "execute",
+                    False,
+                ):
+                    results.append(
+                        {
+                            "step": index,
+                            "ok": False,
+                            "capability":
+                                step.capability,
+                            "provider":
+                                capability.provider,
+                            "error":
+                                "security_denied",
+                            "security_reason":
+                                "provenance_denied",
+                        }
+                    )
+                    continue
+
+                source_text = (
+                    str(
+                        getattr(
+                            plan,
+                            "interpretation",
+                            "",
+                        )
+                        or ""
+                    )
+                )
+
+                if not source_text:
+                    source_text = str(
+                        step.reason or ""
+                    )
+
+                gate = default_security_boundary()
+
+                security = gate.authorize(
+                    source_text=source_text,
+                    permission=(
+                        InformationPermission.EXECUTE
+                    ),
+                )
+
+                if not security.allowed:
+                    results.append(
+                        {
+                            "ok": False,
+                            "capability":
+                                step.capability,
+                            "provider":
+                                capability.provider,
+                            "error":
+                                "security_denied",
+                            "security_reason":
+                                security.reason,
+                            "security_decision":
+                                security.assessment.decision,
+                        }
+                    )
+                    continue
 
                 outcome = capability.executor(
                     step.arguments

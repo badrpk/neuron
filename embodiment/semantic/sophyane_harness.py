@@ -27,6 +27,7 @@ from integration.sophyane_planner import (
 
 from semantic.context import (
     SemanticContext,
+    default_context_provenance,
 )
 
 from semantic.executor import (
@@ -43,6 +44,12 @@ from semantic.registry import (
 
 from semantic.validator import (
     validate_plan,
+)
+from runtime.security_provenance import (
+    semantic_context_execution_provenance,
+)
+from runtime.semantic_dependency_resolver import (
+    derive_step_provenance,
 )
 
 
@@ -159,6 +166,8 @@ def main() -> int:
                 "identity",
                 {},
             ),
+        provenance=
+            default_context_provenance(),
     )
 
     planner = (
@@ -176,9 +185,54 @@ def main() -> int:
         {},
     )
 
+    fallback_provenance = (
+        semantic_context_execution_provenance(
+            context
+        )
+    )
+
+    fallback_dict = (
+        fallback_provenance
+        .permissions.__dict__
+        | {
+            "origin":
+                fallback_provenance.origin.value
+        }
+    )
+
+    def resolve_step_provenance(
+        *,
+        capability,
+        arguments,
+        reason,
+    ):
+        resolved = derive_step_provenance(
+            context=context,
+            capability=capability,
+            arguments=arguments,
+            reason=reason,
+        )
+
+        return (
+            resolved.permissions.__dict__
+            | {
+                "origin":
+                    resolved.origin.value,
+                "source_ids":
+                    list(
+                        resolved.source_ids
+                    ),
+                "transformed":
+                    resolved.transformed,
+            }
+        )
+
     plan = validate_plan(
         raw,
         registry,
+        provenance=fallback_dict,
+        step_provenance_resolver=
+            resolve_step_provenance,
     )
 
     result = {

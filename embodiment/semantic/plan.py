@@ -20,6 +20,10 @@ class PlanStep:
         default_factory=list
     )
 
+    provenance: dict[str, Any] = field(
+        default_factory=dict
+    )
+
 
 @dataclass
 class SemanticPlan:
@@ -36,6 +40,10 @@ class SemanticPlan:
     clarification_question: str | None = None
 
     confidence: float = 0.0
+
+    provenance: dict[str, Any] = field(
+        default_factory=dict
+    )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

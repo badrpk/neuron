@@ -38,5 +38,51 @@ class SemanticContext:
         default_factory=list
     )
 
+    provenance: dict[str, dict[str, object]] = field(
+        default_factory=dict
+    )
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def default_context_provenance() -> dict[str, dict[str, object]]:
+    """
+    Authority metadata created by Neuron itself.
+
+    This metadata is never accepted from planner/model output.
+    """
+    return {
+        "user_utterance": {
+            "origin": "user",
+            "read": True,
+            "trust": True,
+            "persist": True,
+            "execute": True,
+            "propagate": True,
+        },
+        "screen": {
+            "origin": "screen",
+            "read": True,
+            "trust": False,
+            "persist": True,
+            "execute": False,
+            "propagate": False,
+        },
+        "perception": {
+            "origin": "external",
+            "read": True,
+            "trust": False,
+            "persist": True,
+            "execute": False,
+            "propagate": False,
+        },
+        "memory": {
+            "origin": "memory",
+            "read": True,
+            "trust": False,
+            "persist": False,
+            "execute": False,
+            "propagate": False,
+        },
+    }

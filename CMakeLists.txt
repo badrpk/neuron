@@ -202,3 +202,18 @@ add_test(
     NAME neuron_prompt_security_api
     COMMAND test_prompt_security_api
 )
+
+# Python/embodiment security bridge.
+#
+# This executable intentionally exposes only PromptSecurityApi
+# classification. Python never selects legacy classifiers directly.
+add_executable(
+    neuron_security_cli
+    src/neuron_security_cli.cpp
+)
+
+target_link_libraries(
+    neuron_security_cli
+    PRIVATE
+    neuron_core
+)

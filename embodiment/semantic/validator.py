@@ -16,6 +16,9 @@ class PlanValidationError(ValueError):
 def validate_plan(
     raw: dict[str, Any],
     registry: CapabilityRegistry,
+    *,
+    provenance: dict[str, Any] | None = None,
+    step_provenance_resolver=None,
 ) -> SemanticPlan:
 
     interpretation = str(
@@ -109,6 +112,33 @@ def validate_plan(
                 )
             )
 
+        if step_provenance_resolver is not None:
+            try:
+                resolved_provenance = dict(
+                    step_provenance_resolver(
+                        capability=name,
+                        arguments=arguments,
+                        reason=str(
+                            item.get(
+                                "reason",
+                                "",
+                            )
+                        ),
+                    )
+                    or {}
+                )
+            except Exception:
+                #
+                # Resolver failure can never upgrade authority.
+                #
+                resolved_provenance = dict(
+                    provenance or {}
+                )
+        else:
+            resolved_provenance = dict(
+                provenance or {}
+            )
+
         steps.append(
             PlanStep(
                 capability=name,
@@ -132,6 +162,7 @@ def validate_plan(
                         [],
                     )
                 ],
+                provenance=resolved_provenance,
             )
         )
 
@@ -146,4 +177,7 @@ def validate_plan(
         clarification_question=
             clarification_question,
         confidence=confidence,
+        provenance=dict(
+            provenance or {}
+        ),
     )

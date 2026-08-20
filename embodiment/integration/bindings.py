@@ -6,6 +6,10 @@ from typing import Any
 
 from desktop.windows_bridge import WindowsBridge
 from perception.vision_client import VisionClient
+from runtime.security_boundary import (
+    InformationPermission,
+    default_security_boundary,
+)
 from integration.sophyane_visual_memory import (
     SophyaneVisualMemory,
     VisualChunkInput,
@@ -512,14 +516,19 @@ def bind_local_capabilities(
             # Only successful grounded visual perception becomes
             # durable semantic memory.
             #
+            grounded_answer = str(
+                output.get(
+                    "answer",
+                    "",
+                )
+                or ""
+            ).strip()
+
             if (
                 output.get("ok") is True
                 and output.get("status")
                     == "grounded_visual_answer"
-                and str(
-                    output.get("answer", "")
-                    or ""
-                ).strip()
+                and grounded_answer
             ):
                 try:
                     memory = SophyaneVisualMemory()
@@ -536,18 +545,35 @@ def bind_local_capabilities(
                         else ""
                     )
 
+                    persistence_security = (
+                        default_security_boundary()
+                        .authorize(
+                            source_text=grounded_answer,
+                            permission=(
+                                InformationPermission.PERSIST
+                            ),
+                        )
+                    )
+
+                    if not persistence_security.allowed:
+                        return {
+                            "ok": True,
+                            "capability":
+                                "screen.visual_question",
+                            "status":
+                                "grounded_visual_answer",
+                            "answer": grounded_answer,
+                            "memory_written": False,
+                            "memory_security_reason":
+                                persistence_security.reason,
+                        }
+
                     chunk = memory.remember(
                         VisualChunkInput(
                             screenshot_path=(
                                 screenshot_path
                             ),
-                            description=str(
-                                output.get(
-                                    "answer",
-                                    "",
-                                )
-                                or ""
-                            ).strip(),
+                            description=grounded_answer,
                             timestamp=float(
                                 observed.get(
                                     "captured_at",
