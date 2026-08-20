@@ -28,9 +28,12 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .venv/
+.embodiment-test-venv/
 venv/
 dist/
-runtime/
+# Runtime package source is tracked; generated runtime data is ignored.
+runtime/*
+!runtime/*.py
 *.db
 *.db-shm
 *.db-wal

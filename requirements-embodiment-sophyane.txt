@@ -1,0 +1,8 @@
+# Neuron does not vendor Sophyane.
+#
+# Sophyane integrations use an existing Sophyane checkout selected by
+# NEURON_SOPHYANE_ROOT (default: ~/sophyane).
+#
+# Install Sophyane's own declared dependencies in the environment used
+# for Sophyane-backed Neuron capabilities. Sophyane currently declares
+# numpy>=1.26 itself.

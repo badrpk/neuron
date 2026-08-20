@@ -1,0 +1,2 @@
+# Neuron embodiment test dependencies.
+pytest>=8
