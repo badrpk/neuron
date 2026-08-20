@@ -74,5 +74,20 @@ Return JSON ONLY with this shape:
   "reply": null
 }}
 
+Dependency contract:
+- "depends_on" must always be a JSON array of integer step indices.
+- Step indices are zero-based.
+- A step may depend only on an earlier step.
+- Never place capability names such as "screen.observe" in "depends_on".
+- If a step has no dependency, use [].
+
+Planning contract:
+- For arithmetic, general knowledge, ordinary conversation, or reasoning
+  that does not require live device state, sensors, memory, filesystem
+  access, or external actions, return "steps": [] and put the answer
+  directly in "reply".
+- Do not call screen, memory, sensor, or execution capabilities merely
+  to reason about information already present in the user's request.
+
 The capability names must come from the provided capability catalog.
 """.strip()

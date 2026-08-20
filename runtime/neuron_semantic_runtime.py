@@ -25,6 +25,10 @@ for value in (
         )
 
 
+from neuron_quality_escalation import (
+    resolve_quality,
+)
+
 from neuron_reasoning_backend import (
     run_neuron_generate,
 )
@@ -1708,6 +1712,21 @@ def handle_semantic_turn(
             direct = (
                 answer_call.answer
             )
+
+        quality = resolve_quality(
+            instruction=text,
+            primary_answer=direct,
+        )
+
+        if not quality.ok:
+            return SemanticTurnResult(
+                handled=True,
+                ok=False,
+                error=quality.error,
+                code=30,
+            )
+
+        direct = quality.answer
 
         _HISTORY.extend(
             [

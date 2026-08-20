@@ -139,6 +139,57 @@ def validate_plan(
                 provenance or {}
             )
 
+        raw_depends_on = item.get(
+            "depends_on",
+            [],
+        )
+
+        if not isinstance(
+            raw_depends_on,
+            list,
+        ):
+            raise PlanValidationError(
+                f"step {index} depends_on must be an array "
+                "of earlier integer step indices"
+            )
+
+        depends_on: list[int] = []
+
+        for dependency in raw_depends_on:
+            # bool is an int subclass in Python, but it is not a
+            # valid semantic-plan dependency index.
+            if (
+                not isinstance(
+                    dependency,
+                    int,
+                )
+                or isinstance(
+                    dependency,
+                    bool,
+                )
+            ):
+                raise PlanValidationError(
+                    f"step {index} has invalid dependency "
+                    f"{dependency!r}; depends_on must contain "
+                    "integer step indices"
+                )
+
+            if dependency < 0:
+                raise PlanValidationError(
+                    f"step {index} dependency {dependency} "
+                    "must not be negative"
+                )
+
+            if dependency >= index:
+                raise PlanValidationError(
+                    f"step {index} dependency {dependency} "
+                    "must reference an earlier step"
+                )
+
+            depends_on.append(
+                dependency
+            )
+
         steps.append(
             PlanStep(
                 capability=name,
@@ -155,13 +206,7 @@ def validate_plan(
                         0.0,
                     )
                 ),
-                depends_on=[
-                    int(x)
-                    for x in item.get(
-                        "depends_on",
-                        [],
-                    )
-                ],
+                depends_on=depends_on,
                 provenance=resolved_provenance,
             )
         )
