@@ -17,8 +17,10 @@ from integration.sophyane_visual_memory import (
 from semantic.registry import CapabilityRegistry
 
 
-STATE_PATH = Path(
-    r"""/home/badrpk/neuron/embodiment/runtime/state.json"""
+STATE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "runtime"
+    / "state.json"
 )
 
 
