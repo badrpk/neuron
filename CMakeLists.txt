@@ -188,6 +188,22 @@ add_test(
 )
 
 add_executable(
+    test_prompt_security_v54
+    tests/test_prompt_security_v54.cpp
+)
+
+target_link_libraries(
+    test_prompt_security_v54
+    PRIVATE
+    neuron_core
+)
+
+add_test(
+    NAME neuron_prompt_security_v54
+    COMMAND test_prompt_security_v54
+)
+
+add_executable(
     test_prompt_security_api
     tests/test_prompt_security_api.cpp
 )

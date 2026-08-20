@@ -593,6 +593,140 @@ SecurityDecision more_restrictive(
     ) ? a : b;
 }
 
+
+/*
+ * NEURON_PROMPT_SECURITY_V54C_STRUCTURAL_OBFUSCATION
+ *
+ * Obfuscation must be inferred from a structural transformation,
+ * not merely from two normalized strings having different
+ * whitespace boundaries.
+ */
+
+bool contains_percent_encoded_byte(
+    const std::string& input
+) {
+    for (
+        std::size_t i = 0;
+        i + 2 < input.size();
+        ++i
+    ) {
+        if (
+            input[i] == '%' &&
+            hex_value(
+                static_cast<unsigned char>(
+                    input[i + 1]
+                )
+            ) >= 0 &&
+            hex_value(
+                static_cast<unsigned char>(
+                    input[i + 2]
+                )
+            ) >= 0
+        ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool contains_zero_width_utf8(
+    const std::string& input
+) {
+    return
+        input.find(
+            "\xE2\x80\x8B"
+        ) !=
+        std::string::npos;
+}
+
+bool contains_comment_separator(
+    const std::string& input
+) {
+    return
+        input.find("/**/") !=
+        std::string::npos;
+}
+
+bool contains_split_letter_run(
+    const std::string& normalized
+) {
+    const auto tokens =
+        split_space_tokens(
+            normalized
+        );
+
+    std::size_t run = 0;
+
+    for (const auto& token : tokens) {
+        if (
+            token.size() == 1 &&
+            std::isalnum(
+                static_cast<unsigned char>(
+                    token[0]
+                )
+            )
+        ) {
+            run++;
+
+            /*
+             * Three consecutive single-character tokens are
+             * enough to indicate deliberate word splitting.
+             *
+             * Two are common in ordinary prose ("a b").
+             */
+            if (run >= 3) {
+                return true;
+            }
+        } else {
+            run = 0;
+        }
+    }
+
+    return false;
+}
+
+bool contains_inword_evasion_delimiter(
+    const std::string& input
+) {
+    if (input.size() < 3) {
+        return false;
+    }
+
+    for (
+        std::size_t i = 1;
+        i + 1 < input.size();
+        ++i
+    ) {
+        const unsigned char prev =
+            static_cast<unsigned char>(
+                input[i - 1]
+            );
+
+        const unsigned char next =
+            static_cast<unsigned char>(
+                input[i + 1]
+            );
+
+        const char c =
+            input[i];
+
+        if (
+            (
+                c == '_' ||
+                c == '.' ||
+                c == '-'
+            ) &&
+            std::isalnum(prev) &&
+            std::isalnum(next)
+        ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool educational_context(
     const std::string& text
 ) {
@@ -611,6 +745,9 @@ bool educational_context(
                 "training example",
                 "security awareness",
                 "security presentation",
+                "security test",
+                "classify this string",
+                "classify the string",
                 "defensive pseudocode",
                 "classifier that detects",
                 "methods for identifying",
@@ -670,9 +807,13 @@ bool source_provenance(
                 "retrieved document",
                 "retrieved email",
                 "retrieved note",
+                "email says",
+                "the email",
+                "downloaded note",
+                "remote page",
+                "remote content",
                 "search result",
                 "webpage",
-                "remote content",
                 "external content",
                 "attached text",
                 "attached text says",
@@ -698,13 +839,372 @@ bool source_provenance(
                 "replace",
                 "reveal",
                 "disclose",
+                "expose",
                 "grant",
                 "ignore",
+                "stop following",
+                "adopt",
+                "remember",
+                "forward",
                 "operate with"
             }
         );
 
     return external_source && imperative;
+}
+
+
+/*
+ * NEURON_PROMPT_SECURITY_V54B_COMPOSITIONAL_INTENT
+ *
+ * Detect semantic intent by composing independent evidence groups.
+ * This intentionally avoids requiring complete attack phrases.
+ */
+
+bool compositional_instruction_supersession(
+    const std::string& text
+) {
+    /*
+     * NEURON_PROMPT_SECURITY_V54D_GENERALIZED_INTENT
+     *
+     * Compose three independent families:
+     *   1. revoke/replace old authority
+     *   2. authority-bearing content
+     *   3. previous/current hierarchy scope
+     */
+    const bool revocation =
+        contains_any(
+            text,
+            {
+                "ignore",
+                "disregard",
+                "discard",
+                "forget",
+                "override",
+                "replace",
+                "cancel",
+                "cancelled",
+                "revoke",
+                "revoked",
+                "obsolete",
+                "invalid",
+                "void",
+                "drop",
+                "stop obeying",
+                "stop following",
+                "not binding",
+                "binding anymore",
+                "no longer apply",
+                "no longer binding",
+                "no longer matter",
+                "follow only",
+                "obey only",
+                "use my",
+                "do what follows"
+            }
+        );
+
+    const bool authority =
+        contains_any(
+            text,
+            {
+                "instruction",
+                "instructions",
+                "direction",
+                "directions",
+                "rule",
+                "rules",
+                "policy",
+                "policies",
+                "constraint",
+                "constraints",
+                "guidance",
+                "told",
+                "requirements",
+                "safety"
+            }
+        );
+
+    const bool hierarchy_scope =
+        contains_any(
+            text,
+            {
+                "previous",
+                "prior",
+                "earlier",
+                "before",
+                "above",
+                "old",
+                "existing",
+                "current",
+                "system",
+                "safety",
+                "came before",
+                "from now on"
+            }
+        );
+
+    return
+        revocation &&
+        authority &&
+        hierarchy_scope;
+}
+
+bool compositional_hidden_instruction_disclosure(
+    const std::string& text
+) {
+    const bool disclosure =
+        contains_any(
+            text,
+            {
+                "reveal",
+                "show",
+                "see the",
+                "see your",
+                "let me see",
+                "print",
+                "disclose",
+                "expose",
+                "output",
+                "provide",
+                "return",
+                "give me",
+                "tell me",
+                "i want"
+            }
+        );
+
+    const bool confidential_scope =
+        contains_any(
+            text,
+            {
+                "hidden",
+                "private",
+                "confidential",
+                "secret",
+                "internal",
+                "developer",
+                "developer only",
+                "developer-only",
+                "system",
+                "system level",
+                "system-level",
+                "startup"
+            }
+        );
+
+    const bool control_material =
+        contains_any(
+            text,
+            {
+                "instruction",
+                "instructions",
+                "prompt",
+                "configuration",
+                "policy",
+                "directions",
+                "rules"
+            }
+        );
+
+    return
+        disclosure &&
+        confidential_scope &&
+        control_material;
+}
+
+bool compositional_assumed_authorization(
+    const std::string& text
+) {
+    const bool assumption =
+        contains_any(
+            text,
+            {
+                "as though",
+                "as if",
+                "assume",
+                "pretend",
+                "pre authorized",
+                "pre-authorized",
+                "already approved",
+                "already authorized",
+                "already been granted",
+                "already given",
+                "consider approved",
+                "consider authorized",
+                "consider consent",
+                "treat this as authorized",
+                "treat this action as"
+            }
+        );
+
+    const bool authorization =
+        contains_any(
+            text,
+            {
+                "approval",
+                "approved",
+                "authorization",
+                "authorized",
+                "permission",
+                "permissions",
+                "consent",
+                "confirmation",
+                "granted"
+            }
+        );
+
+    const bool bypass_behavior =
+        contains_any(
+            text,
+            {
+                "skip",
+                "without asking",
+                "don't ask",
+                "do not ask",
+                "proceed",
+                "any checks",
+                "permission exists",
+                "system says otherwise"
+            }
+        );
+
+    return
+        assumption &&
+        (
+            authorization ||
+            bypass_behavior
+        );
+}
+
+bool compositional_persistence_request(
+    const std::string& text
+) {
+    const bool persistence_action =
+        contains_any(
+            text,
+            {
+                "store",
+                "remember",
+                "write",
+                "keep",
+                "preserve",
+                "retain",
+                "persist",
+                "survive",
+                "remain",
+                "remains",
+                "carry",
+                "carry this",
+                "make sure"
+            }
+        );
+
+    const bool durable_scope =
+        contains_any(
+            text,
+            {
+                "permanent",
+                "permanently",
+                "forever",
+                "persistent",
+                "future session",
+                "future sessions",
+                "later conversation",
+                "later conversations",
+                "future conversation",
+                "future conversations",
+                "after this chat",
+                "chat ends",
+                "context reset",
+                "context is erased",
+                "context erased",
+                "conversation is cleared",
+                "conversation cleared",
+                "across resets",
+                "across sessions",
+                "after reset",
+                "fresh restart",
+                "restart",
+                "future",
+                "later"
+            }
+        );
+
+    const bool instruction_object =
+        contains_any(
+            text,
+            {
+                "instruction",
+                "instructions",
+                "directive",
+                "command",
+                "behavior",
+                "rule",
+                "rules"
+            }
+        );
+
+    return
+        persistence_action &&
+        durable_scope &&
+        instruction_object;
+}
+
+bool compositional_agent_propagation(
+    const std::string& text
+) {
+    const bool propagation =
+        contains_any(
+            text,
+            {
+                "pass",
+                "send",
+                "copy",
+                "give",
+                "teach",
+                "replicate",
+                "propagate",
+                "adopt",
+                "forward",
+                "share",
+                "seed",
+                "transfer",
+                "receive",
+                "receives"
+            }
+        );
+
+    const bool agent_target =
+        contains_any(
+            text,
+            {
+                "agent",
+                "agents",
+                "peer",
+                "peers",
+                "shared agent memory"
+            }
+        );
+
+    const bool instruction_object =
+        contains_any(
+            text,
+            {
+                "instruction",
+                "instructions",
+                "directive",
+                "behavior",
+                "command",
+                "rule",
+                "rules"
+            }
+        );
+
+    return
+        propagation &&
+        agent_target &&
+        instruction_object;
 }
 
 } // namespace
@@ -979,6 +1479,55 @@ PromptSecuritySemanticExtractor::classify(
             ? 0.90
             : 0.0;
 
+    const bool composed_supersession =
+        compositional_instruction_supersession(
+            evidence_text
+        );
+
+    const bool hidden_instruction_disclosure =
+        compositional_hidden_instruction_disclosure(
+            evidence_text
+        );
+
+    const bool assumed_authorization =
+        compositional_assumed_authorization(
+            evidence_text
+        );
+
+    const bool persistence_request =
+        compositional_persistence_request(
+            evidence_text
+        );
+
+    const bool propagation_request =
+        compositional_agent_propagation(
+            evidence_text
+        );
+
+    if (composed_supersession) {
+        out.concepts.instruction_supersession =
+            std::max(
+                out.concepts.instruction_supersession,
+                0.80
+            );
+    }
+
+    if (hidden_instruction_disclosure) {
+        out.concepts.secret_disclosure_request =
+            std::max(
+                out.concepts.secret_disclosure_request,
+                0.80
+            );
+    }
+
+    if (assumed_authorization) {
+        out.concepts.authorization_bypass =
+            std::max(
+                out.concepts.authorization_bypass,
+                0.75
+            );
+    }
+
 
     /*
      * Multilingual semantic mappings are grouped
@@ -1079,10 +1628,11 @@ PromptSecuritySemanticExtractor::classify(
     const bool suspicious_encoding =
         !decoded_base64_text.empty() ||
         !decoded_hex_text.empty() ||
-        (
-            normalized_obfuscation !=
-            text
-        ) ||
+        contains_percent_encoded_byte(prompt) ||
+        contains_zero_width_utf8(prompt) ||
+        contains_comment_separator(prompt) ||
+        contains_split_letter_run(text) ||
+        contains_inword_evasion_delimiter(prompt) ||
         contains_any(
             text,
             {
@@ -1106,6 +1656,27 @@ PromptSecuritySemanticExtractor::classify(
                 out.concepts.external_instruction_provenance
             }
         );
+
+    /*
+     * Persistence and propagation cross separate trust boundaries.
+     * They require a non-ALLOW front-door result unless clearly
+     * attenuated by educational/defensive framing below.
+     */
+    if (persistence_request) {
+        malicious =
+            std::max(
+                malicious,
+                0.70
+            );
+    }
+
+    if (propagation_request) {
+        malicious =
+            std::max(
+                malicious,
+                0.75
+            );
+    }
 
     /*
      * Educational framing attenuates quoted /
@@ -1234,6 +1805,18 @@ PromptSecuritySemanticExtractor::classify(
     ) {
         out.reasons.push_back(
             "semantic: external instruction provenance"
+        );
+    }
+
+    if (persistence_request) {
+        out.reasons.push_back(
+            "semantic: durable instruction persistence"
+        );
+    }
+
+    if (propagation_request) {
+        out.reasons.push_back(
+            "semantic: agent instruction propagation"
         );
     }
 

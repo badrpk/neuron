@@ -46,7 +46,7 @@ struct PromptSecurityResult {
     double risk = 0.0;
     SecurityConceptSnapshot concepts;
     std::vector<std::string> reason_codes;
-    std::string classifier_version = "prompt-security-v5.3";
+    std::string classifier_version = "prompt-security-v5.4";
     std::string policy_version = "policy-v1";
 };
 
