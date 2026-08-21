@@ -1237,6 +1237,100 @@ def _provider_call(
     )
 
 
+def _failed_execution_answer(
+    execution: list[dict[str, Any]],
+) -> str:
+    """
+    Build a deterministic user-facing failure summary.
+
+    Failed capability evidence is authoritative. This formatter
+    intentionally does not rely on an LLM to decide whether a
+    failed execution succeeded.
+    """
+
+    failures = [
+        item
+        for item in execution
+        if not bool(
+            item.get(
+                "ok"
+            )
+        )
+    ]
+
+    if not failures:
+        return ""
+
+    details = []
+
+    for item in failures:
+        capability = str(
+            item.get(
+                "capability"
+            )
+            or "capability"
+        )
+
+        provider = str(
+            item.get(
+                "provider"
+            )
+            or ""
+        ).strip()
+
+        reason = str(
+            item.get(
+                "error"
+            )
+            or ""
+        ).strip()
+
+        result = item.get(
+            "result"
+        )
+
+        if (
+            not reason
+            and isinstance(
+                result,
+                dict,
+            )
+        ):
+            reason = str(
+                result.get(
+                    "error"
+                )
+                or result.get(
+                    "status"
+                )
+                or ""
+            ).strip()
+
+        if not reason:
+            reason = (
+                "the provider did not complete "
+                "the capability successfully"
+            )
+
+        source = (
+            f" via {provider}"
+            if provider
+            else ""
+        )
+
+        details.append(
+            f"- {capability}{source}: {reason}"
+        )
+
+    return (
+        "I couldn't complete the requested "
+        "capability execution successfully.\n\n"
+        + "\n".join(
+            details
+        )
+    )
+
+
 def _execute_plan(
     *,
     plan,
@@ -2249,65 +2343,80 @@ def handle_semantic_turn(
             + evidence[-10000:]
         )
 
-    synthesis = _provider_call(
-        text=(
-            "USER REQUEST:\n"
-            + text
-            + "\n\n"
-            "NEURON CAPABILITY EXECUTION "
-            "RESULTS:\n"
-            + evidence
-            + "\n\n"
-            "Answer the user from these "
-            "grounded results."
-        ),
-
-        system=(
-            SYNTHESIS_SYSTEM
-        ),
-
-        session_environment=(
-            session_environment
-        ),
-
-        sophyane_executable=(
-            sophyane_executable
-        ),
+    execution_ok = all(
+        bool(
+            item.get(
+                "ok"
+            )
+        )
+        for item in execution
     )
 
-    if not synthesis.ok:
-        # Even when synthesis fails, return truthful
-        # structured evidence rather than hallucination.
+    if not execution_ok:
+        # Execution evidence is authoritative.
+        #
+        # Do not ask synthesis to characterize a failed
+        # execution: an LLM-generated answer could contradict
+        # the structured provider result while the machine
+        # status correctly remains failed.
         answer = (
-            "I executed the selected Neuron "
-            "capabilities, but the reasoning "
-            "backend could not synthesize the "
-            "result.\n\n"
-            + evidence
+            _failed_execution_answer(
+                execution
+            )
         )
 
         ok = False
-        code = 28
+        code = 29
 
     else:
-        answer = (
-            synthesis.answer
+        synthesis = _provider_call(
+            text=(
+                "USER REQUEST:\n"
+                + text
+                + "\n\n"
+                "NEURON CAPABILITY EXECUTION "
+                "RESULTS:\n"
+                + evidence
+                + "\n\n"
+                "Answer the user from these "
+                "grounded results."
+            ),
+
+            system=(
+                SYNTHESIS_SYSTEM
+            ),
+
+            session_environment=(
+                session_environment
+            ),
+
+            sophyane_executable=(
+                sophyane_executable
+            ),
         )
 
-        ok = all(
-            bool(
-                item.get(
-                    "ok"
-                )
+        if not synthesis.ok:
+            # Successful execution is preserved as evidence,
+            # but failure of the reasoning backend still means
+            # the semantic turn itself did not complete.
+            answer = (
+                "I executed the selected Neuron "
+                "capabilities successfully, but "
+                "the reasoning backend could not "
+                "synthesize the result.\n\n"
+                + evidence
             )
-            for item in execution
-        )
 
-        code = (
-            0
-            if ok
-            else 29
-        )
+            ok = False
+            code = 28
+
+        else:
+            answer = (
+                synthesis.answer
+            )
+
+            ok = True
+            code = 0
 
     _HISTORY.extend(
         [

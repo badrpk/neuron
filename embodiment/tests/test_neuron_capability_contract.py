@@ -1136,3 +1136,179 @@ def test_audio_timeout_remains_explicit_failure(
     )
 
     assert result["error"] == "timeout"
+
+
+def test_failed_execution_answer_is_deterministic():
+    execution = [
+        {
+            "step": 0,
+            "ok": False,
+            "capability":
+                "pytest.read",
+            "provider":
+                "pytest.provider",
+            "result": {
+                "ok": False,
+                "error":
+                    "pytest unavailable",
+            },
+        },
+    ]
+
+    answer = (
+        runtime._failed_execution_answer(
+            execution
+        )
+    )
+
+    assert (
+        "couldn't complete"
+        in answer
+    )
+
+    assert (
+        "pytest.read"
+        in answer
+    )
+
+    assert (
+        "pytest.provider"
+        in answer
+    )
+
+    assert (
+        "pytest unavailable"
+        in answer
+    )
+
+
+def test_failed_execution_answer_uses_top_level_error():
+    execution = [
+        {
+            "step": 0,
+            "ok": False,
+            "capability":
+                "pytest.read",
+            "provider":
+                "pytest.provider",
+            "error":
+                "pytest-provider-boom",
+        },
+    ]
+
+    answer = (
+        runtime._failed_execution_answer(
+            execution
+        )
+    )
+
+    assert (
+        "pytest-provider-boom"
+        in answer
+    )
+
+
+def test_failed_execution_answer_never_needs_synthesis(
+    monkeypatch,
+):
+    execution = [
+        {
+            "step": 0,
+            "ok": False,
+            "capability":
+                "pytest.read",
+            "provider":
+                "pytest.provider",
+            "result": {
+                "ok": False,
+                "error":
+                    "pytest unavailable",
+            },
+        },
+    ]
+
+    calls = []
+
+    def forbidden_provider_call(**kwargs):
+        calls.append(
+            kwargs
+        )
+
+        raise AssertionError(
+            "synthesis must not run "
+            "for failed execution"
+        )
+
+    monkeypatch.setattr(
+        runtime,
+        "_provider_call",
+        forbidden_provider_call,
+    )
+
+    answer = (
+        runtime._failed_execution_answer(
+            execution
+        )
+    )
+
+    assert not calls
+    assert "pytest unavailable" in answer
+
+
+def test_failed_execution_formatter_handles_invalid_result():
+    execution = [
+        {
+            "step": 0,
+            "ok": False,
+            "capability":
+                "pytest.read",
+            "provider":
+                "pytest.provider",
+            "error":
+                "invalid provider result",
+            "result":
+                None,
+        },
+    ]
+
+    answer = (
+        runtime._failed_execution_answer(
+            execution
+        )
+    )
+
+    assert (
+        "invalid provider result"
+        in answer
+    )
+
+
+def test_failed_execution_formatter_handles_security_denial():
+    execution = [
+        {
+            "step": 0,
+            "ok": False,
+            "capability":
+                "sophyane.execute",
+            "error":
+                "security_denied",
+            "security_reason":
+                "provenance_denied_execute",
+        },
+    ]
+
+    answer = (
+        runtime._failed_execution_answer(
+            execution
+        )
+    )
+
+    assert (
+        "sophyane.execute"
+        in answer
+    )
+
+    assert (
+        "security_denied"
+        in answer
+    )
