@@ -397,10 +397,42 @@ def _audio_executor(
             )
         )
 
-        if (
-            result.ok
-            and result.text
-        ):
+        if not result.ok:
+            return {
+                "ok": False,
+
+                "seconds":
+                    seconds,
+
+                "recognized_speech":
+                    recognized,
+
+                "speaker_diarization":
+                    False,
+
+                "speaker_gender_classification":
+                    False,
+
+                "error":
+                    str(
+                        getattr(
+                            result,
+                            "error",
+                            "",
+                        )
+                        or getattr(
+                            result,
+                            "status",
+                            "",
+                        )
+                        or (
+                            "audio listener "
+                            "failed"
+                        )
+                    ),
+            }
+
+        if result.text:
             value = (
                 result.text
                 .strip()
@@ -1341,19 +1373,43 @@ def _execute_plan(
                 )
             )
 
-            outcome_ok = True
-
-            if isinstance(
+            if not isinstance(
                 outcome,
                 dict,
             ):
-                if (
-                    outcome.get(
-                        "ok"
-                    )
-                    is False
-                ):
-                    outcome_ok = False
+                results.append(
+                    {
+                        "step":
+                            index,
+
+                        "ok":
+                            False,
+
+                        "capability":
+                            capability.name,
+
+                        "provider":
+                            capability.provider,
+
+                        "error":
+                            (
+                                "invalid provider "
+                                "result"
+                            ),
+
+                        "result":
+                            outcome,
+                    }
+                )
+
+                continue
+
+            outcome_ok = (
+                outcome.get(
+                    "ok"
+                )
+                is not False
+            )
 
             results.append(
                 {

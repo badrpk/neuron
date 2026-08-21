@@ -651,3 +651,168 @@ def test_direct_execute_plan_allows_explicit_user_execute(
                 "Run the coding task in Sophyane."
         }
     ]
+
+
+def test_execute_plan_rejects_non_dict_provider_result(
+    monkeypatch,
+):
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    registry = CapabilityRegistry()
+
+    capability = Capability(
+        name="pytest.read",
+        description="pytest",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    def malformed_executor(arguments):
+        del arguments
+        return None
+
+    capability.executor = (
+        malformed_executor
+    )
+
+    registry.register(
+        capability
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "pytest malformed provider"
+        ),
+        steps=[
+            PlanStep(
+                capability="pytest.read",
+                arguments={},
+                provenance={
+                    "read": True,
+                    "trust": True,
+                    "persist": False,
+                    "execute": False,
+                    "propagate": False,
+                    "origin": "user",
+                },
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Read the pytest provider."
+        ),
+    )
+
+    assert len(result) == 1
+    assert result[0]["ok"] is False
+
+    assert (
+        result[0]["error"]
+        == "invalid provider result"
+    )
+
+    assert result[0]["result"] is None
+
+
+def test_audio_listener_failure_is_not_masked(
+    monkeypatch,
+):
+    import sys
+    import types
+
+    calls = []
+
+    class FailedListenResult:
+        ok = False
+        text = ""
+        status = "error"
+        error = (
+            "pytest microphone unavailable"
+        )
+
+    class FakeWindowsListener:
+
+        def listen_once(
+            self,
+            *,
+            timeout_seconds,
+        ):
+            calls.append(
+                timeout_seconds
+            )
+
+            return FailedListenResult()
+
+    fake_module = types.ModuleType(
+        "audio.windows_listener"
+    )
+
+    fake_module.WindowsListener = (
+        FakeWindowsListener
+    )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "audio.windows_listener",
+        fake_module,
+    )
+
+    ticks = iter(
+        (
+            0.0,
+            0.0,
+            0.0,
+            2.0,
+        )
+    )
+
+    def fake_monotonic():
+        try:
+            return next(
+                ticks
+            )
+        except StopIteration:
+            return 2.0
+
+    monkeypatch.setattr(
+        runtime.time,
+        "monotonic",
+        fake_monotonic,
+    )
+
+    monkeypatch.setattr(
+        runtime.time,
+        "sleep",
+        lambda value: None,
+    )
+
+    result = runtime._audio_executor(
+        {
+            "seconds": 1,
+        }
+    )
+
+    assert calls
+
+    assert result["ok"] is False
+
+    assert (
+        result["recognized_speech"]
+        == []
+    )
+
+    assert (
+        "pytest microphone unavailable"
+        in result["error"]
+    )
