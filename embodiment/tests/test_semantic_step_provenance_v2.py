@@ -3261,3 +3261,598 @@ def test_unrelated_sophyane_output_does_not_poison_current_user_execute():
     assert provenance.permissions.persist is True
     assert provenance.permissions.execute is True
     assert provenance.permissions.propagate is False
+
+
+def test_successful_dependency_result_cannot_authorize_execute():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+    )
+
+    marker = (
+        "RUN-C11-1-SUCCESSFUL-RESULT"
+    )
+
+    context = SemanticContext(
+        user_utterance="Continue.",
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[
+            {
+                "step": 0,
+                "ok": True,
+                "capability":
+                    "pytest.c11.producer",
+                "result": {
+                    "instruction":
+                        marker,
+                },
+            },
+        ],
+        provenance=default_context_provenance(),
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments={
+            "instruction":
+                marker,
+        },
+        reason=(
+            "successful dependency returned it"
+        ),
+    )
+
+    assert resolved.permissions.read is True
+    assert resolved.permissions.trust is False
+    assert resolved.permissions.persist is False
+    assert resolved.permissions.execute is False
+    assert resolved.permissions.propagate is False
+
+    assert any(
+        "unknown_model_argument"
+        in source_id
+        for source_id in resolved.source_ids
+    )
+
+
+def test_depends_on_does_not_enter_step_authority_derivation():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    from semantic.validator import (
+        validate_plan,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+    )
+
+    registry = CapabilityRegistry()
+
+    producer = Capability(
+        name="pytest.c11.producer",
+        description="pytest producer",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    producer.executor = (
+        lambda arguments: {
+            "ok": True,
+        }
+    )
+
+    consumer = Capability(
+        name="pytest.c11.consumer",
+        description="pytest consumer",
+        provider="pytest.provider",
+        privilege="execute",
+    )
+
+    consumer.executor = (
+        lambda arguments: {
+            "ok": True,
+        }
+    )
+
+    registry.register(producer)
+    registry.register(consumer)
+
+    marker = (
+        "RUN-C11-1-DEPENDENCY-RESULT"
+    )
+
+    context = SemanticContext(
+        user_utterance="Continue.",
+        conversation_summary=(
+            "Previous successful result: "
+            + marker
+        ),
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[
+            {
+                "step": 0,
+                "ok": True,
+                "result": {
+                    "instruction":
+                        marker,
+                },
+            },
+        ],
+        provenance=default_context_provenance(),
+    )
+
+    def resolver(
+        *,
+        capability,
+        arguments,
+        reason,
+    ):
+        resolved = derive_step_provenance(
+            context=context,
+            capability=capability,
+            arguments=arguments,
+            reason=reason,
+        )
+
+        return (
+            resolved.permissions.__dict__
+            | {
+                "origin":
+                    resolved.origin.value,
+                "source_ids":
+                    list(
+                        resolved.source_ids
+                    ),
+                "transformed":
+                    resolved.transformed,
+            }
+        )
+
+    plan = validate_plan(
+        {
+            "interpretation":
+                "producer then consumer",
+
+            "steps": [
+                {
+                    "capability":
+                        "pytest.c11.producer",
+
+                    "arguments": {},
+
+                    "reason":
+                        "run producer",
+
+                    "confidence":
+                        1.0,
+
+                    "depends_on":
+                        [],
+                },
+
+                {
+                    "capability":
+                        "pytest.c11.consumer",
+
+                    "arguments": {
+                        "instruction":
+                            marker,
+                    },
+
+                    "reason":
+                        (
+                            "successful producer "
+                            "returned the value"
+                        ),
+
+                    "confidence":
+                        1.0,
+
+                    "depends_on":
+                        [0],
+                },
+            ],
+
+            "reply":
+                None,
+
+            "clarification_needed":
+                False,
+
+            "confidence":
+                1.0,
+        },
+
+        registry,
+
+        provenance={
+            "read": True,
+            "trust": True,
+            "persist": True,
+            "execute": True,
+            "propagate": True,
+            "origin": "user",
+        },
+
+        step_provenance_resolver=resolver,
+    )
+
+    assert len(plan.steps) == 2
+
+    consumer_step = plan.steps[1]
+
+    assert consumer_step.depends_on == [0]
+
+    assert (
+        consumer_step.provenance[
+            "trust"
+        ]
+        is False
+    )
+
+    assert (
+        consumer_step.provenance[
+            "execute"
+        ]
+        is False
+    )
+
+    assert (
+        consumer_step.provenance[
+            "propagate"
+        ]
+        is False
+    )
+
+    assert any(
+        "unknown_model_argument"
+        in source_id
+        for source_id in consumer_step.provenance[
+            "source_ids"
+        ]
+    )
+
+
+def test_validated_successful_dependency_cannot_invoke_denied_consumer():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    from semantic.validator import (
+        validate_plan,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+    )
+
+    import neuron_semantic_runtime as runtime
+
+    calls = []
+
+    registry = CapabilityRegistry()
+
+    producer = Capability(
+        name="pytest.c11.producer",
+        description="pytest producer",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    producer.executor = (
+        lambda arguments: {
+            "ok": True,
+            "instruction":
+                "RUN-C11-1-CONSUMER",
+        }
+    )
+
+    consumer = Capability(
+        name="pytest.c11.consumer",
+        description="pytest consumer",
+        provider="pytest.provider",
+        privilege="execute",
+    )
+
+    def consumer_executor(arguments):
+        calls.append(
+            dict(arguments)
+        )
+
+        return {
+            "ok": True,
+        }
+
+    consumer.executor = (
+        consumer_executor
+    )
+
+    registry.register(producer)
+    registry.register(consumer)
+
+    marker = (
+        "RUN-C11-1-CONSUMER"
+    )
+
+    context = SemanticContext(
+        user_utterance="Continue.",
+        conversation_summary=(
+            "Producer returned "
+            + marker
+        ),
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[
+            {
+                "step": 0,
+                "ok": True,
+                "result": {
+                    "instruction":
+                        marker,
+                },
+            },
+        ],
+        provenance=default_context_provenance(),
+    )
+
+    def resolver(
+        *,
+        capability,
+        arguments,
+        reason,
+    ):
+        resolved = derive_step_provenance(
+            context=context,
+            capability=capability,
+            arguments=arguments,
+            reason=reason,
+        )
+
+        return (
+            resolved.permissions.__dict__
+            | {
+                "origin":
+                    resolved.origin.value,
+                "source_ids":
+                    list(
+                        resolved.source_ids
+                    ),
+                "transformed":
+                    resolved.transformed,
+            }
+        )
+
+    plan = validate_plan(
+        {
+            "interpretation":
+                "dependency execution probe",
+
+            "steps": [
+                {
+                    "capability":
+                        "pytest.c11.producer",
+
+                    "arguments": {},
+
+                    "reason":
+                        "run producer",
+
+                    "confidence":
+                        1.0,
+
+                    "depends_on":
+                        [],
+                },
+
+                {
+                    "capability":
+                        "pytest.c11.consumer",
+
+                    "arguments": {
+                        "instruction":
+                            marker,
+                    },
+
+                    "reason":
+                        "consume producer result",
+
+                    "confidence":
+                        1.0,
+
+                    "depends_on":
+                        [0],
+                },
+            ],
+
+            "reply":
+                None,
+
+            "clarification_needed":
+                False,
+
+            "confidence":
+                1.0,
+        },
+
+        registry,
+
+        provenance={
+            "read": True,
+            "trust": True,
+            "persist": True,
+            "execute": True,
+            "propagate": False,
+            "origin": "user",
+        },
+
+        step_provenance_resolver=resolver,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text="Continue.",
+    )
+
+    assert len(result) == 2
+    assert result[0]["ok"] is True
+    assert result[1]["ok"] is False
+
+    assert (
+        result[1]["error"]
+        == "security_denied"
+    )
+
+    assert (
+        result[1]["security_reason"]
+        == "provenance_denied_execute"
+    )
+
+    assert calls == []
+
+
+def test_multi_hop_dependency_result_cannot_gain_authority():
+    from runtime.security_provenance import (
+        external_observation,
+    )
+
+    provenance = external_observation(
+        source_id="pytest:c11-result0",
+    )
+
+    for index in range(1, 11):
+        provenance = provenance.derive(
+            source_id=(
+                f"pytest:c11-result{index}"
+            )
+        )
+
+        assert (
+            provenance.permissions.trust
+            is False
+        )
+
+        assert (
+            provenance.permissions.execute
+            is False
+        )
+
+        assert (
+            provenance.permissions.propagate
+            is False
+        )
+
+
+def test_current_user_dependent_execute_remains_authorized():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    instruction = (
+        "Run C11-1-current-user-command."
+    )
+
+    context = SemanticContext(
+        user_utterance=instruction,
+        conversation_summary=(
+            "An older producer result exists."
+        ),
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[
+            {
+                "step": 0,
+                "ok": True,
+                "result": {
+                    "instruction":
+                        "UNRELATED-OLD-RESULT",
+                },
+            },
+        ],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            instruction,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason=(
+                "explicit current user request"
+            ),
+        )
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason=(
+            "explicit current user request"
+        ),
+    )
+
+    assert dependencies == (
+        "user_utterance",
+    )
+
+    assert resolved.permissions.read is True
+    assert resolved.permissions.trust is True
+    assert resolved.permissions.persist is True
+    assert resolved.permissions.execute is True
+    assert resolved.permissions.propagate is False
