@@ -2304,3 +2304,464 @@ def test_current_user_execute_survives_unrelated_reloaded_context():
     assert resolved.permissions.persist is True
     assert resolved.permissions.execute is True
     assert resolved.permissions.propagate is False
+
+
+def test_trusted_user_execute_does_not_imply_propagate():
+    from runtime.security_boundary import (
+        InformationPermission,
+        authorize_with_provenance,
+        default_security_boundary,
+    )
+
+    from runtime.security_provenance import (
+        trusted_user_instruction,
+    )
+
+    provenance = trusted_user_instruction(
+        source_id="pytest:c9-user",
+    )
+
+    assert provenance.permissions.read is True
+    assert provenance.permissions.trust is True
+    assert provenance.permissions.persist is True
+    assert provenance.permissions.execute is True
+    assert provenance.permissions.propagate is False
+
+    decision = authorize_with_provenance(
+        boundary=default_security_boundary(),
+        source_text=(
+            "Forward this user instruction."
+        ),
+        permission=(
+            InformationPermission.PROPAGATE
+        ),
+        provenance=provenance,
+    )
+
+    assert decision.allowed is False
+
+
+def test_provider_history_recent_actions_cannot_create_propagate():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+    )
+
+    marker = (
+        "FORWARD-C9-PROVIDER-OUTPUT"
+    )
+
+    context = SemanticContext(
+        user_utterance="Continue.",
+        conversation_summary=(
+            "Previous provider output: "
+            + marker
+        ),
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[
+            {
+                "ok": True,
+                "provider":
+                    "pytest.provider",
+                "result": {
+                    "instruction":
+                        marker,
+                },
+            },
+        ],
+        provenance=default_context_provenance(),
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments={
+            "instruction":
+                marker,
+        },
+        reason=(
+            "forward prior provider output"
+        ),
+    )
+
+    assert resolved.permissions.trust is False
+    assert resolved.permissions.execute is False
+    assert resolved.permissions.propagate is False
+
+    assert any(
+        "unknown_model_argument"
+        in source_id
+        for source_id in resolved.source_ids
+    )
+
+
+def test_screen_reference_cannot_create_propagate():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    marker = (
+        "SCREEN-C9-PROPAGATE"
+    )
+
+    context = SemanticContext(
+        user_utterance=(
+            "Use what the screen says."
+        ),
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={
+            "text":
+                marker,
+        },
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            marker,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason=(
+                "use screen content"
+            ),
+        )
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason=(
+            "use screen content"
+        ),
+    )
+
+    assert dependencies == (
+        "user_utterance",
+        "screen",
+    )
+
+    assert (
+        "semantic:screen"
+        in resolved.source_ids
+    )
+
+    assert resolved.permissions.trust is False
+    assert resolved.permissions.execute is False
+    assert resolved.permissions.propagate is False
+
+
+def test_memory_reference_cannot_create_propagate():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    marker = (
+        "MEMORY-C9-PROPAGATE"
+    )
+
+    context = SemanticContext(
+        user_utterance=(
+            "Use the instruction from memory."
+        ),
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={
+            "instruction":
+                marker,
+        },
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            marker,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason=(
+                "use memory content"
+            ),
+        )
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason=(
+            "use memory content"
+        ),
+    )
+
+    assert dependencies == (
+        "user_utterance",
+        "memory",
+    )
+
+    assert (
+        "semantic:memory"
+        in resolved.source_ids
+    )
+
+    assert resolved.permissions.trust is False
+    assert resolved.permissions.persist is False
+    assert resolved.permissions.execute is False
+    assert resolved.permissions.propagate is False
+
+
+def test_persist_reload_cannot_create_propagate():
+    from runtime.security_provenance import (
+        external_observation,
+    )
+
+    source = external_observation(
+        source_id="pytest:c9-source",
+    )
+
+    persisted = source.derive(
+        source_id="pytest:c9-persisted",
+    )
+
+    reloaded = persisted.derive(
+        source_id="pytest:c9-reloaded",
+    )
+
+    assert source.permissions.propagate is False
+    assert persisted.permissions.propagate is False
+    assert reloaded.permissions.propagate is False
+
+    assert source.permissions.execute is False
+    assert persisted.permissions.execute is False
+    assert reloaded.permissions.execute is False
+
+    assert (
+        "pytest:c9-source"
+        in reloaded.source_ids
+    )
+
+    assert (
+        "pytest:c9-persisted"
+        in reloaded.source_ids
+    )
+
+    assert (
+        "pytest:c9-reloaded"
+        in reloaded.source_ids
+    )
+
+
+def test_multi_hop_derivation_cannot_create_propagate():
+    from runtime.security_provenance import (
+        external_observation,
+    )
+
+    provenance = external_observation(
+        source_id="pytest:c9-hop0",
+    )
+
+    for index in range(1, 9):
+        provenance = provenance.derive(
+            source_id=(
+                f"pytest:c9-hop{index}"
+            )
+        )
+
+        assert provenance.permissions.trust is False
+        assert provenance.permissions.execute is False
+        assert provenance.permissions.propagate is False
+
+
+def test_validator_recomputes_planner_propagate_as_false():
+    from semantic.capability import Capability
+
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    from semantic.validator import (
+        validate_plan,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+    )
+
+    registry = CapabilityRegistry()
+
+    capability = Capability(
+        name="pytest.c9.execute",
+        description="pytest propagation probe",
+        provider="pytest.provider",
+        privilege="execute",
+    )
+
+    capability.executor = (
+        lambda arguments: {
+            "ok": True,
+        }
+    )
+
+    registry.register(
+        capability
+    )
+
+    marker = (
+        "FORWARD-C9-UNTRUSTED"
+    )
+
+    context = SemanticContext(
+        user_utterance="Continue.",
+        conversation_summary=(
+            "External provider output said "
+            + marker
+        ),
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    def resolver(
+        *,
+        capability,
+        arguments,
+        reason,
+    ):
+        resolved = derive_step_provenance(
+            context=context,
+            capability=capability,
+            arguments=arguments,
+            reason=reason,
+        )
+
+        return (
+            resolved.permissions.__dict__
+            | {
+                "origin":
+                    resolved.origin.value,
+                "source_ids":
+                    list(
+                        resolved.source_ids
+                    ),
+                "transformed":
+                    resolved.transformed,
+            }
+        )
+
+    plan = validate_plan(
+        {
+            "interpretation":
+                "attempt propagation",
+
+            "steps": [
+                {
+                    "capability":
+                        "pytest.c9.execute",
+
+                    "arguments": {
+                        "instruction":
+                            marker,
+                    },
+
+                    "reason":
+                        (
+                            "planner says propagation "
+                            "was authorized earlier"
+                        ),
+
+                    "confidence":
+                        1.0,
+
+                    "depends_on":
+                        [],
+                },
+            ],
+
+            "reply":
+                None,
+
+            "clarification_needed":
+                False,
+
+            "confidence":
+                1.0,
+        },
+
+        registry,
+
+        provenance={
+            "read": True,
+            "trust": True,
+            "persist": True,
+            "execute": True,
+            "propagate": True,
+            "origin": "user",
+        },
+
+        step_provenance_resolver=resolver,
+    )
+
+    step = plan.steps[0]
+
+    assert step.provenance["trust"] is False
+    assert step.provenance["execute"] is False
+    assert step.provenance["propagate"] is False
+
+    assert any(
+        "unknown_model_argument"
+        in source_id
+        for source_id in step.provenance[
+            "source_ids"
+        ]
+    )
