@@ -1404,12 +1404,44 @@ def _execute_plan(
 
                 continue
 
-            outcome_ok = (
+            outcome_status = (
                 outcome.get(
                     "ok"
                 )
-                is not False
             )
+
+            if (
+                outcome_status
+                is not True
+                and outcome_status
+                is not False
+            ):
+                results.append(
+                    {
+                        "step":
+                            index,
+
+                        "ok":
+                            False,
+
+                        "capability":
+                            capability.name,
+
+                        "provider":
+                            capability.provider,
+
+                        "error":
+                            (
+                                "invalid provider "
+                                "result"
+                            ),
+
+                        "result":
+                            outcome,
+                    }
+                )
+
+                continue
 
             results.append(
                 {
@@ -1417,7 +1449,7 @@ def _execute_plan(
                         index,
 
                     "ok":
-                        outcome_ok,
+                        outcome_status,
 
                     "capability":
                         capability.name,

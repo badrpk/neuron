@@ -816,3 +816,323 @@ def test_audio_listener_failure_is_not_masked(
         "pytest microphone unavailable"
         in result["error"]
     )
+
+
+@pytest.mark.parametrize(
+    "provider_result",
+    (
+        {
+            "value":
+                "missing explicit ok",
+        },
+        {},
+        {
+            "ok": None,
+        },
+        {
+            "ok": "false",
+        },
+        {
+            "ok": 0,
+        },
+    ),
+)
+def test_execute_plan_rejects_non_boolean_or_missing_ok(
+    provider_result,
+):
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    registry = CapabilityRegistry()
+
+    capability = Capability(
+        name="pytest.read",
+        description="pytest",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    def malformed_executor(arguments):
+        del arguments
+
+        return dict(
+            provider_result
+        )
+
+    capability.executor = (
+        malformed_executor
+    )
+
+    registry.register(
+        capability
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "pytest strict provider result"
+        ),
+        steps=[
+            PlanStep(
+                capability="pytest.read",
+                arguments={},
+                provenance={
+                    "read": True,
+                    "trust": True,
+                    "persist": False,
+                    "execute": False,
+                    "propagate": False,
+                    "origin": "user",
+                },
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Read the pytest provider."
+        ),
+    )
+
+    assert len(result) == 1
+
+    assert result[0]["ok"] is False
+
+    assert (
+        result[0]["error"]
+        == "invalid provider result"
+    )
+
+    assert (
+        result[0]["result"]
+        == provider_result
+    )
+
+
+def test_execute_plan_accepts_only_explicit_true_success():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    registry = CapabilityRegistry()
+
+    capability = Capability(
+        name="pytest.read",
+        description="pytest",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    capability.executor = (
+        lambda arguments: {
+            "ok": True,
+            "value": "pytest-success",
+        }
+    )
+
+    registry.register(
+        capability
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "pytest explicit provider success"
+        ),
+        steps=[
+            PlanStep(
+                capability="pytest.read",
+                arguments={},
+                provenance={
+                    "read": True,
+                    "trust": True,
+                    "persist": False,
+                    "execute": False,
+                    "propagate": False,
+                    "origin": "user",
+                },
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Read the pytest provider."
+        ),
+    )
+
+    assert len(result) == 1
+    assert result[0]["ok"] is True
+
+    assert (
+        result[0]["result"]["ok"]
+        is True
+    )
+
+
+def test_execute_plan_preserves_explicit_false_failure():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    registry = CapabilityRegistry()
+
+    capability = Capability(
+        name="pytest.read",
+        description="pytest",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    capability.executor = (
+        lambda arguments: {
+            "ok": False,
+            "error":
+                "pytest explicit failure",
+        }
+    )
+
+    registry.register(
+        capability
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "pytest explicit provider failure"
+        ),
+        steps=[
+            PlanStep(
+                capability="pytest.read",
+                arguments={},
+                provenance={
+                    "read": True,
+                    "trust": True,
+                    "persist": False,
+                    "execute": False,
+                    "propagate": False,
+                    "origin": "user",
+                },
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Read the pytest provider."
+        ),
+    )
+
+    assert len(result) == 1
+    assert result[0]["ok"] is False
+
+    assert (
+        result[0]["result"]["error"]
+        == "pytest explicit failure"
+    )
+
+
+def test_audio_timeout_remains_explicit_failure(
+    monkeypatch,
+):
+    import sys
+    import types
+
+    calls = []
+
+    class TimeoutListenResult:
+        ok = False
+        text = ""
+        error = "timeout"
+
+    class FakeWindowsListener:
+        def listen_once(
+            self,
+            *,
+            timeout_seconds,
+        ):
+            calls.append(
+                timeout_seconds
+            )
+
+            return TimeoutListenResult()
+
+    module = types.ModuleType(
+        "audio.windows_listener"
+    )
+
+    module.WindowsListener = (
+        FakeWindowsListener
+    )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "audio.windows_listener",
+        module,
+    )
+
+    ticks = iter(
+        (
+            0.0,
+            0.0,
+            0.0,
+            2.0,
+        )
+    )
+
+    def fake_monotonic():
+        try:
+            return next(
+                ticks
+            )
+
+        except StopIteration:
+            return 2.0
+
+    monkeypatch.setattr(
+        runtime.time,
+        "monotonic",
+        fake_monotonic,
+    )
+
+    monkeypatch.setattr(
+        runtime.time,
+        "sleep",
+        lambda value: None,
+    )
+
+    result = runtime._audio_executor(
+        {
+            "seconds": 1,
+        }
+    )
+
+    assert calls
+
+    assert result["ok"] is False
+
+    assert (
+        result["recognized_speech"]
+        == []
+    )
+
+    assert result["error"] == "timeout"
