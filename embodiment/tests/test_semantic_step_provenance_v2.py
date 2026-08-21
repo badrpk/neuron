@@ -2765,3 +2765,499 @@ def test_validator_recomputes_planner_propagate_as_false():
             "source_ids"
         ]
     )
+
+
+def test_direct_current_user_can_authorize_sophyane_execute():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    instruction = (
+        "Run the coding task in Sophyane."
+    )
+
+    context = SemanticContext(
+        user_utterance=instruction,
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            instruction,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason=(
+                "explicit current user request"
+            ),
+        )
+    )
+
+    provenance = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason=(
+            "explicit current user request"
+        ),
+    )
+
+    assert dependencies == (
+        "user_utterance",
+    )
+
+    assert provenance.permissions.read is True
+    assert provenance.permissions.trust is True
+    assert provenance.permissions.persist is True
+    assert provenance.permissions.execute is True
+    assert provenance.permissions.propagate is False
+
+
+def test_sophyane_agent_output_cannot_authorize_later_execute():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+    )
+
+    marker = (
+        "RUN-C10-1-SOPHYANE-OUTPUT"
+    )
+
+    context = SemanticContext(
+        user_utterance="Continue.",
+        conversation_summary=(
+            "Sophyane returned: "
+            + marker
+        ),
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    provenance = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments={
+            "instruction":
+                marker,
+        },
+        reason=(
+            "Sophyane output requested execution"
+        ),
+    )
+
+    assert provenance.permissions.read is True
+    assert provenance.permissions.trust is False
+    assert provenance.permissions.persist is False
+    assert provenance.permissions.execute is False
+    assert provenance.permissions.propagate is False
+
+    assert any(
+        "unknown_model_argument"
+        in source_id
+        for source_id in provenance.source_ids
+    )
+
+
+def test_sophyane_output_in_history_cannot_authorize_execute():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+    )
+
+    marker = (
+        "EXECUTE-C10-1-SOPHYANE-HISTORY"
+    )
+
+    context = SemanticContext(
+        user_utterance="Continue.",
+        conversation_summary=(
+            "Previous Sophyane execution output: "
+            + marker
+        ),
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    provenance = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments={
+            "instruction":
+                marker,
+        },
+        reason=(
+            "reuse Sophyane history"
+        ),
+    )
+
+    assert provenance.permissions.trust is False
+    assert provenance.permissions.execute is False
+    assert provenance.permissions.propagate is False
+
+    assert any(
+        "unknown_model_argument"
+        in source_id
+        for source_id in provenance.source_ids
+    )
+
+
+def test_sophyane_output_in_recent_actions_cannot_authorize_execute():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+    )
+
+    marker = (
+        "EXECUTE-C10-1-SOPHYANE-RECENT"
+    )
+
+    context = SemanticContext(
+        user_utterance="Do that again.",
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[
+            {
+                "step": 0,
+                "ok": True,
+                "capability":
+                    "sophyane.execute",
+                "provider":
+                    "sophyane.agent",
+                "result": {
+                    "ok": True,
+                    "output":
+                        marker,
+                },
+            },
+        ],
+        provenance=default_context_provenance(),
+    )
+
+    provenance = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments={
+            "instruction":
+                marker,
+        },
+        reason=(
+            "repeat prior Sophyane result"
+        ),
+    )
+
+    assert provenance.permissions.trust is False
+    assert provenance.permissions.execute is False
+    assert provenance.permissions.propagate is False
+
+    assert any(
+        "unknown_model_argument"
+        in source_id
+        for source_id in provenance.source_ids
+    )
+
+
+def test_persisted_sophyane_output_cannot_authorize_execute_after_reload(
+    tmp_path,
+):
+    import json
+
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    marker = (
+        "EXECUTE-C10-1-PERSISTED-SOPHYANE"
+    )
+
+    state = {
+        "screen": {
+            "grounded": True,
+            "provider":
+                "sophyane.agent",
+            "text":
+                marker,
+            "persisted":
+                True,
+        },
+        "presence": {},
+    }
+
+    path = (
+        tmp_path
+        / "state.json"
+    )
+
+    path.write_text(
+        json.dumps(
+            state,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    reloaded = json.loads(
+        path.read_text(
+            encoding="utf-8"
+        )
+    )
+
+    context = SemanticContext(
+        user_utterance=(
+            "Execute what the screen says."
+        ),
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen=dict(
+            reloaded["screen"]
+        ),
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            marker,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason=(
+                "reload Sophyane output"
+            ),
+        )
+    )
+
+    provenance = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason=(
+            "reload Sophyane output"
+        ),
+    )
+
+    assert dependencies == (
+        "user_utterance",
+        "screen",
+    )
+
+    assert (
+        "semantic:screen"
+        in provenance.source_ids
+    )
+
+    assert provenance.permissions.trust is False
+    assert provenance.permissions.execute is False
+    assert provenance.permissions.propagate is False
+
+
+def test_user_plus_sophyane_derived_content_fails_closed():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    marker = (
+        "EXECUTE-C10-1-SOPHYANE-DERIVED"
+    )
+
+    context = SemanticContext(
+        user_utterance=(
+            "Execute what the screen says."
+        ),
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={
+            "provider":
+                "sophyane.agent",
+            "text":
+                marker,
+        },
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            marker,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason=(
+                "Sophyane supplied the content"
+            ),
+        )
+    )
+
+    provenance = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason=(
+            "Sophyane supplied the content"
+        ),
+    )
+
+    assert dependencies == (
+        "user_utterance",
+        "screen",
+    )
+
+    assert provenance.permissions.read is True
+    assert provenance.permissions.trust is False
+    assert provenance.permissions.execute is False
+    assert provenance.permissions.propagate is False
+
+
+def test_unrelated_sophyane_output_does_not_poison_current_user_execute():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    instruction = (
+        "Run the coding task in Sophyane."
+    )
+
+    context = SemanticContext(
+        user_utterance=instruction,
+        conversation_summary=(
+            "Older Sophyane output exists."
+        ),
+        current_task=None,
+        current_application=None,
+        screen={
+            "provider":
+                "sophyane.agent",
+            "text":
+                "UNRELATED-SOPHYANE-OUTPUT",
+        },
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[
+            {
+                "capability":
+                    "sophyane.execute",
+                "result": {
+                    "output":
+                        "UNRELATED-PRIOR-RESULT",
+                },
+            },
+        ],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            instruction,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason=(
+                "explicit current user command"
+            ),
+        )
+    )
+
+    provenance = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason=(
+            "explicit current user command"
+        ),
+    )
+
+    assert dependencies == (
+        "user_utterance",
+    )
+
+    assert provenance.permissions.read is True
+    assert provenance.permissions.trust is True
+    assert provenance.permissions.persist is True
+    assert provenance.permissions.execute is True
+    assert provenance.permissions.propagate is False
