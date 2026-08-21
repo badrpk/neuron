@@ -2127,3 +2127,785 @@ def test_dependency_gate_runs_before_capability_lookup():
         result[1]["status"]
         == "skipped"
     )
+
+
+def test_dependency_does_not_automatically_inject_result():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    calls = []
+
+    registry = CapabilityRegistry()
+
+    producer = Capability(
+        name="pytest.dataflow.producer",
+        description="pytest producer",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    producer.executor = (
+        lambda arguments: {
+            "ok": True,
+            "value":
+                "UPSTREAM-PRIVATE-VALUE",
+        }
+    )
+
+    registry.register(
+        producer
+    )
+
+    consumer = Capability(
+        name="pytest.dataflow.consumer",
+        description="pytest consumer",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    def consumer_executor(arguments):
+        calls.append(
+            dict(
+                arguments
+            )
+        )
+
+        return {
+            "ok": True,
+            "received":
+                dict(
+                    arguments
+                ),
+        }
+
+    consumer.executor = (
+        consumer_executor
+    )
+
+    registry.register(
+        consumer
+    )
+
+    provenance = (
+        _pytest_read_provenance()
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "pytest dependency ordering only"
+        ),
+        steps=[
+            PlanStep(
+                capability=(
+                    "pytest.dataflow.producer"
+                ),
+                arguments={},
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+            PlanStep(
+                capability=(
+                    "pytest.dataflow.consumer"
+                ),
+                arguments={
+                    "literal":
+                        "USER-LITERAL",
+                },
+                depends_on=[
+                    0,
+                ],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Run pytest dependency dataflow."
+        ),
+    )
+
+    assert (
+        result[0]["ok"]
+        is True
+    )
+
+    assert (
+        result[1]["ok"]
+        is True
+    )
+
+    assert calls == [
+        {
+            "literal":
+                "USER-LITERAL",
+        },
+    ]
+
+    assert (
+        "UPSTREAM-PRIVATE-VALUE"
+        not in repr(
+            calls
+        )
+    )
+
+
+def test_unrelated_sibling_result_cannot_enter_arguments():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    calls = []
+
+    registry = CapabilityRegistry()
+
+    def register(
+        name,
+        marker,
+    ):
+        capability = Capability(
+            name=name,
+            description=name,
+            provider="pytest.provider",
+            privilege="read",
+        )
+
+        def executor(arguments):
+            calls.append(
+                (
+                    name,
+                    dict(
+                        arguments
+                    ),
+                )
+            )
+
+            return {
+                "ok": True,
+                "marker":
+                    marker,
+            }
+
+        capability.executor = (
+            executor
+        )
+
+        registry.register(
+            capability
+        )
+
+    register(
+        "pytest.dataflow.a",
+        "PRIVATE-A",
+    )
+
+    register(
+        "pytest.dataflow.b",
+        "PRIVATE-B",
+    )
+
+    register(
+        "pytest.dataflow.c",
+        "PRIVATE-C",
+    )
+
+    provenance = (
+        _pytest_read_provenance()
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "pytest sibling isolation"
+        ),
+        steps=[
+            PlanStep(
+                capability=(
+                    "pytest.dataflow.a"
+                ),
+                arguments={},
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+            PlanStep(
+                capability=(
+                    "pytest.dataflow.b"
+                ),
+                arguments={},
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+            PlanStep(
+                capability=(
+                    "pytest.dataflow.c"
+                ),
+                arguments={
+                    "literal":
+                        "C",
+                },
+                depends_on=[
+                    0,
+                ],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Run sibling isolation pytest."
+        ),
+    )
+
+    assert all(
+        item["ok"] is True
+        for item in result
+    )
+
+    consumer_arguments = next(
+        arguments
+        for name, arguments
+        in calls
+        if (
+            name
+            == "pytest.dataflow.c"
+        )
+    )
+
+    assert consumer_arguments == {
+        "literal":
+            "C",
+    }
+
+    assert (
+        "PRIVATE-A"
+        not in repr(
+            consumer_arguments
+        )
+    )
+
+    assert (
+        "PRIVATE-B"
+        not in repr(
+            consumer_arguments
+        )
+    )
+
+
+def test_previous_execute_plan_result_is_not_argument_state():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    registry = CapabilityRegistry()
+
+    received = []
+
+    capability = Capability(
+        name="pytest.dataflow.isolated",
+        description="pytest isolation",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    generation = {
+        "value": 0,
+    }
+
+    def executor(arguments):
+        generation["value"] += 1
+
+        received.append(
+            dict(
+                arguments
+            )
+        )
+
+        return {
+            "ok": True,
+            "generation":
+                generation[
+                    "value"
+                ],
+            "private":
+                (
+                    "OLD-RESULT"
+                    if (
+                        generation[
+                            "value"
+                        ]
+                        == 1
+                    )
+                    else "NEW-RESULT"
+                ),
+        }
+
+    capability.executor = (
+        executor
+    )
+
+    registry.register(
+        capability
+    )
+
+    provenance = (
+        _pytest_read_provenance()
+    )
+
+    first = SemanticPlan(
+        interpretation="first",
+        steps=[
+            PlanStep(
+                capability=(
+                    "pytest.dataflow.isolated"
+                ),
+                arguments={
+                    "literal":
+                        "FIRST",
+                },
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+        ],
+        reply=None,
+    )
+
+    second = SemanticPlan(
+        interpretation="second",
+        steps=[
+            PlanStep(
+                capability=(
+                    "pytest.dataflow.isolated"
+                ),
+                arguments={
+                    "literal":
+                        "SECOND",
+                },
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+        ],
+        reply=None,
+    )
+
+    first_result = runtime._execute_plan(
+        plan=first,
+        registry=registry,
+        original_user_text=(
+            "First pytest execution."
+        ),
+    )
+
+    second_result = runtime._execute_plan(
+        plan=second,
+        registry=registry,
+        original_user_text=(
+            "Second pytest execution."
+        ),
+    )
+
+    assert (
+        first_result[0][
+            "result"
+        ][
+            "private"
+        ]
+        == "OLD-RESULT"
+    )
+
+    assert (
+        second_result[0][
+            "result"
+        ][
+            "private"
+        ]
+        == "NEW-RESULT"
+    )
+
+    assert received == [
+        {
+            "literal":
+                "FIRST",
+        },
+        {
+            "literal":
+                "SECOND",
+        },
+    ]
+
+    assert (
+        "OLD-RESULT"
+        not in repr(
+            received[1]
+        )
+    )
+
+
+def test_failed_dependency_result_never_reaches_consumer():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    calls = []
+
+    registry = CapabilityRegistry()
+
+    failed = Capability(
+        name="pytest.dataflow.failed",
+        description="pytest failed",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    def failed_executor(arguments):
+        del arguments
+
+        calls.append(
+            "failed"
+        )
+
+        return {
+            "ok": False,
+            "error":
+                "pytest upstream failure",
+            "private":
+                "UNTRUSTED-UPSTREAM-DATA",
+        }
+
+    failed.executor = (
+        failed_executor
+    )
+
+    registry.register(
+        failed
+    )
+
+    dependent = Capability(
+        name="pytest.dataflow.blocked",
+        description="pytest blocked",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    def forbidden_executor(arguments):
+        calls.append(
+            (
+                "dependent",
+                dict(
+                    arguments
+                ),
+            )
+        )
+
+        return {
+            "ok": True,
+        }
+
+    dependent.executor = (
+        forbidden_executor
+    )
+
+    registry.register(
+        dependent
+    )
+
+    provenance = (
+        _pytest_read_provenance()
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "pytest failed dependency isolation"
+        ),
+        steps=[
+            PlanStep(
+                capability=(
+                    "pytest.dataflow.failed"
+                ),
+                arguments={},
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+            PlanStep(
+                capability=(
+                    "pytest.dataflow.blocked"
+                ),
+                arguments={
+                    "literal":
+                        "SAFE",
+                },
+                depends_on=[
+                    0,
+                ],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Run failed dependency isolation."
+        ),
+    )
+
+    assert calls == [
+        "failed",
+    ]
+
+    assert (
+        result[0]["ok"]
+        is False
+    )
+
+    assert (
+        result[1]["ok"]
+        is False
+    )
+
+    assert (
+        result[1]["error"]
+        == "dependency_failed"
+    )
+
+    assert (
+        result[1]["status"]
+        == "skipped"
+    )
+
+    assert (
+        "UNTRUSTED-UPSTREAM-DATA"
+        not in repr(
+            result[1]
+        )
+    )
+
+
+def test_dependency_index_selects_gate_not_argument_source():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    calls = []
+
+    registry = CapabilityRegistry()
+
+    def register(
+        name,
+        *,
+        ok,
+        marker,
+    ):
+        capability = Capability(
+            name=name,
+            description=name,
+            provider="pytest.provider",
+            privilege="read",
+        )
+
+        def executor(arguments):
+            calls.append(
+                (
+                    name,
+                    dict(
+                        arguments
+                    ),
+                )
+            )
+
+            return {
+                "ok": ok,
+                "marker":
+                    marker,
+                "error":
+                    (
+                        ""
+                        if ok
+                        else f"{name} failed"
+                    ),
+            }
+
+        capability.executor = (
+            executor
+        )
+
+        registry.register(
+            capability
+        )
+
+    register(
+        "pytest.dataflow.zero",
+        ok=True,
+        marker="ZERO-RESULT",
+    )
+
+    register(
+        "pytest.dataflow.one",
+        ok=False,
+        marker="ONE-RESULT",
+    )
+
+    register(
+        "pytest.dataflow.two",
+        ok=True,
+        marker="TWO-RESULT",
+    )
+
+    provenance = (
+        _pytest_read_provenance()
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "pytest exact dependency gate"
+        ),
+        steps=[
+            PlanStep(
+                capability=(
+                    "pytest.dataflow.zero"
+                ),
+                arguments={},
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+            PlanStep(
+                capability=(
+                    "pytest.dataflow.one"
+                ),
+                arguments={},
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+            PlanStep(
+                capability=(
+                    "pytest.dataflow.two"
+                ),
+                arguments={
+                    "literal":
+                        "UNCHANGED",
+                },
+                depends_on=[
+                    1,
+                ],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Run exact dependency gate."
+        ),
+    )
+
+    assert (
+        result[0]["ok"]
+        is True
+    )
+
+    assert (
+        result[1]["ok"]
+        is False
+    )
+
+    assert (
+        result[2]["error"]
+        == "dependency_failed"
+    )
+
+    assert (
+        result[2][
+            "failed_dependencies"
+        ]
+        == [
+            1,
+        ]
+    )
+
+    assert not any(
+        name
+        == "pytest.dataflow.two"
+        for name, _
+        in calls
+    )
+
+
+def test_execute_plan_empty_is_not_semantic_turn_success_path():
+    import inspect
+
+    source = (
+        inspect.getsource(
+            runtime.handle_semantic_turn
+        )
+    )
+
+    direct = source.find(
+        "if not plan.steps:"
+    )
+
+    execute = source.find(
+        "execution = _execute_plan("
+    )
+
+    aggregate = source.find(
+        "execution_ok = all("
+    )
+
+    assert direct >= 0
+    assert execute > direct
+    assert aggregate > execute
