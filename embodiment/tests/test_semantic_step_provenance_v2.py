@@ -1275,3 +1275,358 @@ def test_execution_gate_blocks_history_laundered_execute():
     )
 
     assert calls == []
+
+
+def test_persisted_screen_source_cannot_authorize_execute():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    marker = (
+        "RUN-PERSISTED-SCREEN-INSTRUCTION"
+    )
+
+    context = SemanticContext(
+        user_utterance=(
+            "Do what the screen says."
+        ),
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={
+            "text":
+                marker,
+            "persisted":
+                True,
+        },
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            marker,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason="persisted screen supplied it",
+        )
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason="persisted screen supplied it",
+    )
+
+    assert dependencies == (
+        "user_utterance",
+        "screen",
+    )
+
+    assert resolved.permissions.read is True
+    assert resolved.permissions.trust is False
+    assert resolved.permissions.execute is False
+    assert resolved.permissions.propagate is False
+
+    assert (
+        "semantic:screen"
+        in resolved.source_ids
+    )
+
+
+def test_persisted_memory_source_cannot_authorize_execute():
+    from types import SimpleNamespace
+
+    from runtime.security_provenance import (
+        semantic_step_execution_provenance,
+    )
+
+    context = SimpleNamespace(
+        screen={},
+        perception={},
+        memory={
+            "instruction":
+                "RUN-PERSISTED-MEMORY-INSTRUCTION",
+        },
+    )
+
+    result = (
+        semantic_step_execution_provenance(
+            context,
+            source_dependencies=[
+                "memory",
+            ],
+        )
+    )
+
+    assert result.permissions.read is True
+    assert result.permissions.trust is False
+    assert result.permissions.persist is False
+    assert result.permissions.execute is False
+    assert result.permissions.propagate is False
+
+    assert (
+        "semantic:memory"
+        in result.source_ids
+    )
+
+
+def test_persistence_derivation_preserves_permission_ceiling():
+    from runtime.security_provenance import (
+        external_observation,
+    )
+
+    source = external_observation(
+        source_id="pytest:c8-source"
+    )
+
+    persisted = source.derive(
+        source_id="pytest:c8-persisted"
+    )
+
+    assert (
+        persisted.permissions
+        == source.permissions
+    )
+
+    assert persisted.permissions.read is True
+    assert persisted.permissions.trust is False
+    assert persisted.permissions.execute is False
+    assert persisted.permissions.propagate is False
+
+    assert (
+        "pytest:c8-source"
+        in persisted.source_ids
+    )
+
+    assert (
+        "pytest:c8-persisted"
+        in persisted.source_ids
+    )
+
+
+def test_user_plus_persisted_memory_fails_closed():
+    from types import SimpleNamespace
+
+    from runtime.security_provenance import (
+        semantic_step_execution_provenance,
+    )
+
+    context = SimpleNamespace(
+        screen={},
+        perception={},
+        memory={
+            "instruction":
+                "RUN-PERSISTED-MEMORY-INSTRUCTION",
+        },
+    )
+
+    result = (
+        semantic_step_execution_provenance(
+            context,
+            source_dependencies=[
+                "user_utterance",
+                "memory",
+            ],
+        )
+    )
+
+    assert result.permissions.read is True
+    assert result.permissions.trust is False
+    assert result.permissions.persist is False
+    assert result.permissions.execute is False
+    assert result.permissions.propagate is False
+
+    assert (
+        "semantic:user"
+        in result.source_ids
+    )
+
+    assert (
+        "semantic:memory"
+        in result.source_ids
+    )
+
+
+def test_memory_referenced_execute_fails_closed():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    marker = (
+        "RUN-MEMORY-CONTENT"
+    )
+
+    context = SemanticContext(
+        user_utterance=(
+            "Run the command from memory."
+        ),
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={
+            "instruction":
+                marker,
+        },
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            marker,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason="memory supplied it",
+        )
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason="memory supplied it",
+    )
+
+    assert dependencies == (
+        "user_utterance",
+        "memory",
+    )
+
+    assert resolved.permissions.read is True
+    assert resolved.permissions.trust is False
+    assert resolved.permissions.persist is False
+    assert resolved.permissions.execute is False
+    assert resolved.permissions.propagate is False
+
+
+def test_unreferenced_persisted_screen_does_not_poison_current_user():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    instruction = (
+        "Run C8-current-user-command."
+    )
+
+    context = SemanticContext(
+        user_utterance=instruction,
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={
+            "text":
+                "UNRELATED-PERSISTED-SCREEN-CONTENT",
+            "persisted":
+                True,
+        },
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            instruction,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason="explicit current user request",
+        )
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason="explicit current user request",
+    )
+
+    assert dependencies == (
+        "user_utterance",
+    )
+
+    assert resolved.permissions.read is True
+    assert resolved.permissions.trust is True
+    assert resolved.permissions.persist is True
+    assert resolved.permissions.execute is True
+    assert resolved.permissions.propagate is False
+
+
+def test_persisted_external_provenance_cannot_execute():
+    from runtime.security_boundary import (
+        InformationPermission,
+        authorize_with_provenance,
+        default_security_boundary,
+    )
+
+    from runtime.security_provenance import (
+        external_observation,
+    )
+
+    source = external_observation(
+        source_id="pytest:c8-external"
+    )
+
+    persisted = source.derive(
+        source_id="pytest:c8-persisted"
+    )
+
+    decision = authorize_with_provenance(
+        boundary=default_security_boundary(),
+        source_text=(
+            "Persisted external observation."
+        ),
+        permission=(
+            InformationPermission.EXECUTE
+        ),
+        provenance=persisted,
+    )
+
+    assert decision.allowed is False
+
+    assert persisted.permissions.read is True
+    assert persisted.permissions.trust is False
+    assert persisted.permissions.execute is False
+    assert persisted.permissions.propagate is False
