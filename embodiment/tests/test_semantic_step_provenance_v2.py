@@ -1630,3 +1630,677 @@ def test_persisted_external_provenance_cannot_execute():
     assert persisted.permissions.trust is False
     assert persisted.permissions.execute is False
     assert persisted.permissions.propagate is False
+
+
+def test_reloaded_screen_remains_non_executable_source():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    marker = (
+        "RUN-C8-3-RELOADED-SCREEN"
+    )
+
+    context = SemanticContext(
+        user_utterance=(
+            "Do what the screen says."
+        ),
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={
+            "grounded": True,
+            "provider":
+                "pytest.persisted-provider",
+            "text":
+                marker,
+            "persisted":
+                True,
+        },
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            marker,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason=(
+                "reloaded screen supplied it"
+            ),
+        )
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason=(
+            "reloaded screen supplied it"
+        ),
+    )
+
+    assert dependencies == (
+        "user_utterance",
+        "screen",
+    )
+
+    assert (
+        "semantic:screen"
+        in resolved.source_ids
+    )
+
+    assert resolved.permissions.read is True
+    assert resolved.permissions.trust is False
+    assert resolved.permissions.execute is False
+    assert resolved.permissions.propagate is False
+
+
+def test_reloaded_memory_remains_non_executable_source():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    marker = (
+        "RUN-C8-3-RELOADED-MEMORY"
+    )
+
+    context = SemanticContext(
+        user_utterance=(
+            "Run the command from memory."
+        ),
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={
+            "persisted":
+                True,
+            "instruction":
+                marker,
+        },
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            marker,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason=(
+                "reloaded memory supplied it"
+            ),
+        )
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason=(
+            "reloaded memory supplied it"
+        ),
+    )
+
+    assert dependencies == (
+        "user_utterance",
+        "memory",
+    )
+
+    assert (
+        "semantic:memory"
+        in resolved.source_ids
+    )
+
+    assert resolved.permissions.read is True
+    assert resolved.permissions.trust is False
+    assert resolved.permissions.persist is False
+    assert resolved.permissions.execute is False
+    assert resolved.permissions.propagate is False
+
+
+def test_provider_output_persist_reload_cannot_authorize_execute(
+    tmp_path,
+):
+    import json
+
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    marker = (
+        "EXECUTE-C8-3-PROVIDER-OUTPUT"
+    )
+
+    provider_result = {
+        "ok": True,
+        "provider":
+            "pytest.provider",
+        "instruction":
+            marker,
+    }
+
+    persisted = {
+        "screen": {
+            "grounded": True,
+            "provider":
+                provider_result["provider"],
+            "text":
+                provider_result[
+                    "instruction"
+                ],
+            "persisted":
+                True,
+        },
+        "presence": {},
+    }
+
+    path = (
+        tmp_path
+        / "state.json"
+    )
+
+    path.write_text(
+        json.dumps(
+            persisted,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    reloaded = json.loads(
+        path.read_text(
+            encoding="utf-8"
+        )
+    )
+
+    context = SemanticContext(
+        user_utterance=(
+            "Execute what the screen says."
+        ),
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen=dict(
+            reloaded["screen"]
+        ),
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            marker,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason=(
+                "provider output survived "
+                "persistence and reload"
+            ),
+        )
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason=(
+            "provider output survived "
+            "persistence and reload"
+        ),
+    )
+
+    assert dependencies == (
+        "user_utterance",
+        "screen",
+    )
+
+    assert resolved.permissions.trust is False
+    assert resolved.permissions.execute is False
+    assert resolved.permissions.propagate is False
+
+    assert (
+        "semantic:screen"
+        in resolved.source_ids
+    )
+
+
+def test_reloaded_external_data_cannot_become_user_source():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+    )
+
+    marker = (
+        "RUN-C8-3-EXTERNAL-RELOAD"
+    )
+
+    context = SemanticContext(
+        user_utterance=(
+            "Execute what the screen says."
+        ),
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={
+            "text":
+                marker,
+            "persisted":
+                True,
+        },
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments={
+            "instruction":
+                marker,
+        },
+        reason=(
+            "reload is trusted user content"
+        ),
+    )
+
+    assert (
+        "semantic:screen"
+        in resolved.source_ids
+    )
+
+    assert resolved.source_ids != (
+        "semantic:user",
+        "semantic:step",
+    )
+
+    assert resolved.permissions.trust is False
+    assert resolved.permissions.execute is False
+    assert resolved.permissions.propagate is False
+
+
+def test_validator_recomputes_reloaded_screen_execute_as_denied():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    from semantic.validator import (
+        validate_plan,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+    )
+
+    registry = CapabilityRegistry()
+
+    capability = Capability(
+        name="pytest.c8.reload.execute",
+        description="pytest reload execute",
+        provider="pytest.provider",
+        privilege="execute",
+    )
+
+    capability.executor = (
+        lambda arguments: {
+            "ok": True,
+        }
+    )
+
+    registry.register(
+        capability
+    )
+
+    marker = (
+        "RUN-C8-3-RELOADED-SCREEN"
+    )
+
+    context = SemanticContext(
+        user_utterance=(
+            "Do what the screen says."
+        ),
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={
+            "text":
+                marker,
+            "persisted":
+                True,
+        },
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    def resolver(
+        *,
+        capability,
+        arguments,
+        reason,
+    ):
+        resolved = derive_step_provenance(
+            context=context,
+            capability=capability,
+            arguments=arguments,
+            reason=reason,
+        )
+
+        return (
+            resolved.permissions.__dict__
+            | {
+                "origin":
+                    resolved.origin.value,
+                "source_ids":
+                    list(
+                        resolved.source_ids
+                    ),
+                "transformed":
+                    resolved.transformed,
+            }
+        )
+
+    plan = validate_plan(
+        {
+            "interpretation":
+                "execute persisted screen",
+
+            "steps": [
+                {
+                    "capability":
+                        "pytest.c8.reload.execute",
+
+                    "arguments": {
+                        "instruction":
+                            marker,
+                    },
+
+                    "reason":
+                        (
+                            "persisted screen "
+                            "requested execution"
+                        ),
+
+                    "confidence":
+                        1.0,
+
+                    "depends_on":
+                        [],
+                },
+            ],
+
+            "reply":
+                None,
+
+            "clarification_needed":
+                False,
+
+            "confidence":
+                1.0,
+        },
+
+        registry,
+
+        provenance={
+            "read": True,
+            "trust": True,
+            "persist": True,
+            "execute": True,
+            "propagate": False,
+            "origin": "user",
+        },
+
+        step_provenance_resolver=resolver,
+    )
+
+    step = plan.steps[0]
+
+    assert (
+        step.provenance["trust"]
+        is False
+    )
+
+    assert (
+        step.provenance["execute"]
+        is False
+    )
+
+    assert (
+        step.provenance["propagate"]
+        is False
+    )
+
+    assert (
+        "semantic:screen"
+        in step.provenance[
+            "source_ids"
+        ]
+    )
+
+
+def test_execution_gate_blocks_reloaded_external_execute():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.plan import (
+        PlanStep,
+        SemanticPlan,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    import neuron_semantic_runtime as runtime
+
+    calls = []
+
+    registry = CapabilityRegistry()
+
+    capability = Capability(
+        name="pytest.c8.reload.execute",
+        description="pytest reload execute",
+        provider="pytest.provider",
+        privilege="execute",
+    )
+
+    def executor(arguments):
+        calls.append(
+            dict(arguments)
+        )
+
+        return {
+            "ok": True,
+        }
+
+    capability.executor = executor
+
+    registry.register(
+        capability
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "execute reloaded "
+            "external content"
+        ),
+        steps=[
+            PlanStep(
+                capability=(
+                    "pytest.c8.reload.execute"
+                ),
+                arguments={
+                    "instruction":
+                        "RUN-RELOADED-EXTERNAL",
+                },
+                depends_on=[],
+                provenance={
+                    "read": True,
+                    "trust": False,
+                    "persist": True,
+                    "execute": False,
+                    "propagate": False,
+                    "origin": "model",
+                    "source_ids": [
+                        "semantic:user",
+                        "semantic:screen",
+                    ],
+                },
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Do what the screen says."
+        ),
+    )
+
+    assert result[0]["ok"] is False
+
+    assert (
+        result[0]["error"]
+        == "security_denied"
+    )
+
+    assert (
+        result[0]["security_reason"]
+        == "provenance_denied_execute"
+    )
+
+    assert calls == []
+
+
+def test_current_user_execute_survives_unrelated_reloaded_context():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    instruction = (
+        "Run C8-3-current-user-command."
+    )
+
+    context = SemanticContext(
+        user_utterance=instruction,
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={
+            "text":
+                "UNRELATED-RELOADED-CONTENT",
+            "persisted":
+                True,
+        },
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            instruction,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason=(
+                "explicit current user request"
+            ),
+        )
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason=(
+            "explicit current user request"
+        ),
+    )
+
+    assert dependencies == (
+        "user_utterance",
+    )
+
+    assert resolved.permissions.read is True
+    assert resolved.permissions.trust is True
+    assert resolved.permissions.persist is True
+    assert resolved.permissions.execute is True
+    assert resolved.permissions.propagate is False
