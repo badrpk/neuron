@@ -82,12 +82,28 @@ Dependency contract:
 - If a step has no dependency, use [].
 
 Planning contract:
+- A semantic plan has exactly one answer mode:
+  1. Direct-answer mode:
+     - "steps": []
+     - put the user-facing answer in "reply".
+  2. Capability-execution mode:
+     - one or more capability steps
+     - "reply": null
+     - the final user-facing answer is produced only after grounded
+       capability execution.
+- Never return both a non-empty capability plan and a user-facing
+  "reply" in the same semantic plan.
 - For arithmetic, general knowledge, ordinary conversation, or reasoning
   that does not require live device state, sensors, memory, filesystem
   access, or external actions, return "steps": [] and put the answer
   directly in "reply".
 - Do not call screen, memory, sensor, or execution capabilities merely
   to reason about information already present in the user's request.
+- "reply" is a top-level semantic-plan field, never a capability.
+- Never emit a step whose capability is "reply".
+- For a direct answer, use "steps": [] and place the answer in "reply".
+- Every non-empty step capability must exactly match one capability name
+  from the supplied live capability catalog.
 
 The capability names must come from the provided capability catalog.
 """.strip()

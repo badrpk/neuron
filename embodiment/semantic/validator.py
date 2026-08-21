@@ -211,12 +211,38 @@ def validate_plan(
             )
         )
 
+    raw_reply = raw.get(
+        "reply"
+    )
+
+    #
+    # A semantic plan must choose exactly one answer path.
+    #
+    # When capability execution is requested, the planner may not
+    # pre-claim a user-facing answer. The final grounded answer is
+    # synthesized only after those capabilities actually execute.
+    #
+    # This also catches a common small-model failure mode where the
+    # model invents an unnecessary capability while simultaneously
+    # answering the question from its own reasoning.
+    #
+    if steps:
+        if (
+            raw_reply is not None
+            and str(
+                raw_reply
+            ).strip()
+        ):
+            raise PlanValidationError(
+                "semantic plan mixes capability execution "
+                "with a direct reply; plans with steps must "
+                "set reply to null"
+            )
+
     return SemanticPlan(
         interpretation=interpretation,
         steps=steps,
-        reply=raw.get(
-            "reply"
-        ),
+        reply=raw_reply,
         clarification_needed=
             clarification_needed,
         clarification_question=

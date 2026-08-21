@@ -27,6 +27,41 @@ for value in (
 
 from neuron_quality_escalation import (
     resolve_quality,
+    verify_grounded_evidence_with_gemini,
+)
+
+from neuron_local_intelligence import (
+    gather_local_intelligence,
+)
+
+from neuron_evidence_gate import (
+    evaluate_local_evidence,
+)
+
+from neuron_local_intelligence import (
+    gather_read_only_evidence,
+)
+
+from neuron_grounded_synthesis import (
+    synthesize_grounded_answer,
+)
+
+from neuron_claim_evidence import (
+    verify_grounded_answer,
+)
+
+from neuron_grounded_evidence_gate import (
+    GroundedDisposition,
+    evaluate_grounded_answer,
+    evaluate_external_grounded_verification,
+)
+
+from neuron_grounded_verifier import (
+    run_ambiguous_grounded_verification,
+)
+
+from neuron_b2_request_eligibility import (
+    evaluate_b2_request_eligibility,
 )
 
 from neuron_reasoning_backend import (
@@ -1385,6 +1420,93 @@ def handle_semantic_turn(
             code=2,
         )
 
+    # ========================================================
+    # PHASE_A_LOCAL_INTELLIGENCE_V1
+    #
+    # Native Security authorization occurs at Neuron's
+    # front-door boundary before this semantic turn handler.
+    #
+    # This substrate has no execution, persistence, or
+    # propagation authority. It may only return a direct answer
+    # when bounded deterministic evidence is explicitly accepted
+    # by the local evidence gate.
+    #
+    # Crucially this runs before the selected LLM-runtime
+    # availability check so deterministic reasoning does not
+    # depend on Qwen, Switchyard, Sophyane, or cloud rescue.
+    # ========================================================
+
+    local_intelligence = (
+        gather_local_intelligence(
+            text
+        )
+    )
+
+    local_evidence = (
+        evaluate_local_evidence(
+            handled=(
+                local_intelligence
+                .handled
+            ),
+
+            complete=(
+                local_intelligence
+                .complete
+            ),
+
+            confidence=(
+                local_intelligence
+                .confidence
+            ),
+
+            answer=(
+                local_intelligence
+                .answer
+            ),
+
+            evidence=(
+                local_intelligence
+                .evidence
+            ),
+        )
+    )
+
+    if bool(
+        getattr(
+            local_evidence,
+            "adequate",
+            False,
+        )
+    ):
+        local_answer = str(
+            local_intelligence.answer
+            or ""
+        ).strip()
+
+        if local_answer:
+            _HISTORY.extend(
+                [
+                    (
+                        "User",
+                        text,
+                    ),
+                    (
+                        "Neuron",
+                        local_answer,
+                    ),
+                ]
+            )
+
+            del _HISTORY[:-24]
+
+            return SemanticTurnResult(
+                handled=True,
+                ok=True,
+                answer=local_answer,
+                steps=(),
+                code=0,
+            )
+
     if not sophyane_executable:
         return SemanticTurnResult(
             handled=True,
@@ -1399,6 +1521,188 @@ def handle_semantic_turn(
     session_environment = (
         session.environment()
     )
+
+    # ========================================================
+    # PHASE_B2_GROUNDED_SYNTHESIS_V1
+    #
+    # Phase B2 consumes only bounded READ evidence.
+    #
+    # It has no execution, persistence, or propagation
+    # authority.
+    #
+    # Contextual Sophyane semantic evidence alone is not
+    # sufficient. The B2 synthesizer runs only when the bundle
+    # contains an explicitly support-capable evidence kind.
+    #
+    # Any unsupported, malformed, or uncertain B2 result falls
+    # through to Neuron's existing semantic capability planner.
+    # ========================================================
+
+    b2_eligibility = (
+        evaluate_b2_request_eligibility(
+            text
+        )
+    )
+
+    read_bundle = None
+    grounded_candidate = None
+
+    grounded_candidate_reason = (
+        "b2_request_not_eligible"
+    )
+
+    if b2_eligibility.eligible:
+        read_bundle = (
+            gather_read_only_evidence(
+                text
+            )
+        )
+
+        try:
+            (
+                grounded_candidate,
+                grounded_candidate_reason,
+            ) = synthesize_grounded_answer(
+                request=text,
+                bundle=read_bundle,
+                provider_call=_provider_call,
+                session_environment=(
+                    session_environment
+                ),
+                sophyane_executable=(
+                    sophyane_executable
+                ),
+            )
+
+        except Exception as exc:
+            grounded_candidate = None
+            grounded_candidate_reason = (
+                "grounded_synthesis_exception:"
+                + type(exc).__name__
+            )
+
+    if (
+        grounded_candidate is not None
+        and read_bundle is not None
+    ):
+        grounded_verification = (
+            verify_grounded_answer(
+                candidate=(
+                    grounded_candidate
+                ),
+                bundle=read_bundle,
+            )
+        )
+
+        grounded_gate = (
+            evaluate_grounded_answer(
+                candidate=(
+                    grounded_candidate
+                ),
+                verification=(
+                    grounded_verification
+                ),
+            )
+        )
+
+        #
+        # B2.1
+        #
+        # Only genuine local AMBIGUITY may cross this boundary.
+        #
+        # Unsupported or contradicted material never reaches
+        # Gemini.
+        #
+        if (
+            grounded_gate.disposition
+            is GroundedDisposition.VERIFY
+            and grounded_verification.ambiguous_claims
+            > 0
+            and grounded_verification.unsupported_claims
+            == 0
+            and grounded_verification.contradicted_claims
+            == 0
+        ):
+            external_verification = (
+                run_ambiguous_grounded_verification(
+                    request=text,
+                    candidate=grounded_candidate,
+                    bundle=read_bundle,
+                    local_verification=(
+                        grounded_verification
+                    ),
+                    verifier_call=(
+                        verify_grounded_evidence_with_gemini
+                    ),
+                )
+            )
+
+            grounded_gate = (
+                evaluate_external_grounded_verification(
+                    candidate=grounded_candidate,
+                    verification=(
+                        grounded_verification
+                    ),
+                    external=(
+                        external_verification
+                    ),
+                )
+            )
+
+            #
+            # Once B2.1 has actually been invoked, failure
+            # cannot fall through to an independent answer
+            # path.
+            #
+            if (
+                grounded_gate.disposition
+                is GroundedDisposition.REJECT
+            ):
+                return SemanticTurnResult(
+                    handled=True,
+                    ok=False,
+                    error=(
+                        "Neuron could not verify the "
+                        "ambiguous grounded claim from "
+                        "the supplied READ evidence. "
+                        + grounded_gate.reason
+                    ),
+                    steps=(),
+                    code=28,
+                )
+
+        if (
+            grounded_gate.disposition
+            is GroundedDisposition.ACCEPT
+        ):
+            grounded_answer = str(
+                grounded_gate.answer
+                or ""
+            ).strip()
+
+            if grounded_answer:
+                _HISTORY.extend(
+                    [
+                        (
+                            "User",
+                            text,
+                        ),
+                        (
+                            "Neuron",
+                            grounded_answer,
+                        ),
+                    ]
+                )
+
+                del _HISTORY[:-24]
+
+                return SemanticTurnResult(
+                    handled=True,
+                    ok=True,
+                    answer=grounded_answer,
+                    steps=(),
+                    code=0,
+                )
 
     registry = _build_registry(
         workspace=workspace,
@@ -1623,17 +1927,95 @@ def handle_semantic_turn(
             ),
         )
 
-    except PlanValidationError as error:
-        return SemanticTurnResult(
-            handled=True,
-            ok=False,
-            error=(
-                "Neuron rejected the model's "
-                "tool plan: "
-                + str(error)
-            ),
-            code=26,
-        )
+    except PlanValidationError as first_validation_error:
+        #
+        # A model can produce syntactically valid JSON that still
+        # violates Neuron's live semantic-plan contract, for example
+        # by treating the top-level "reply" field as a capability.
+        #
+        # Perform exactly one bounded repair through the SAME semantic
+        # reasoner. Security, capability authority, provenance, and
+        # execution remain outside the model and are not relaxed.
+        #
+        try:
+            repaired_raw_plan = (
+                _semantic_plan_with_reasoner(
+                    prompt=(
+                        (
+                            "The previous semantic plan failed strict validation.\n\n"
+                            "VALIDATION ERROR:\n"
+                            + str(first_validation_error)
+                            + "\n\n"
+                            "Re-plan the ORIGINAL request from scratch. "
+                            "Return exactly one strict JSON semantic-plan object.\n\n"
+
+                            "NEURON PLAN MODES — CHOOSE EXACTLY ONE:\n"
+                            "1. DIRECT-ANSWER MODE:\n"
+                            "   - Use when the request can be answered from the user's "
+                            "own message, ordinary reasoning, arithmetic, or general "
+                            "knowledge.\n"
+                            "   - Set steps=[]\n"
+                            "   - Put the final user-facing answer in reply.\n"
+                            "   - Do not inspect screen, memory, sensors, filesystem, "
+                            "or execute capabilities merely to reason about facts "
+                            "already supplied by the user.\n\n"
+
+                            "2. CAPABILITY MODE:\n"
+                            "   - Use only when live/current device state, sensors, "
+                            "memory, filesystem state, or external execution is "
+                            "actually required to answer the request.\n"
+                            "   - Set reply=null whenever steps is non-empty.\n"
+                            "   - Use only capabilities from the supplied live catalog.\n"
+                            "   - Every arguments value must be a JSON object.\n"
+                            "   - depends_on must be an array containing only "
+                            "zero-based integer indices of earlier steps.\n\n"
+
+                            "The top-level reply field is NOT a capability. "
+                            "Never emit capability='reply'. "
+                            "Do not preserve an invalid previous plan merely because "
+                            "it was previously generated. "
+                            "Correct the validation failure semantically. "
+                            "Return JSON only, with no commentary.\n\n"
+
+                            "ORIGINAL PLANNER PROMPT:\n"
+                            + prompt
+                        )
+                    ),
+                    system=PLANNER_SYSTEM,
+                )
+            )
+
+            plan = validate_plan(
+                repaired_raw_plan,
+                registry,
+
+                provenance=(
+                    fallback_dict
+                ),
+
+                step_provenance_resolver=(
+                    resolve_step
+                ),
+            )
+
+        except Exception as repair_error:
+            return SemanticTurnResult(
+                handled=True,
+                ok=False,
+                error=(
+                    "Neuron rejected the model's "
+                    "semantic plan after one bounded "
+                    "repair attempt. Initial validation: "
+                    + str(
+                        first_validation_error
+                    )
+                    + "; repair: "
+                    + str(
+                        repair_error
+                    )
+                ),
+                code=26,
+            )
 
     if plan.clarification_needed:
         answer = str(
