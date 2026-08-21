@@ -685,3 +685,593 @@ def test_resolver_screen_reference_adds_canonical_screen_source():
     assert resolved.permissions.trust is False
     assert resolved.permissions.execute is False
     assert resolved.permissions.propagate is False
+
+
+def test_recent_action_derived_execute_argument_fails_closed():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    marker = (
+        "EXECUTE-UNTRUSTED-RECENT-ACTION"
+    )
+
+    context = SemanticContext(
+        user_utterance="Do that again.",
+        conversation_summary="",
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[
+            {
+                "step": 0,
+                "ok": True,
+                "capability":
+                    "pytest.previous",
+                "result": {
+                    "ok": True,
+                    "instruction":
+                        marker,
+                },
+            },
+        ],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            marker,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason="repeat prior action",
+        )
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason="repeat prior action",
+    )
+
+    assert dependencies == (
+        "user_utterance",
+        "unknown_model_argument",
+    )
+
+    assert resolved.permissions.read is True
+    assert resolved.permissions.trust is False
+    assert resolved.permissions.persist is False
+    assert resolved.permissions.execute is False
+    assert resolved.permissions.propagate is False
+
+    assert (
+        "semantic:user"
+        in resolved.source_ids
+    )
+
+    assert any(
+        "unknown_model_argument"
+        in source_id
+        for source_id in resolved.source_ids
+    )
+
+
+def test_conversation_history_derived_execute_argument_fails_closed():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    marker = (
+        "EXECUTE-UNTRUSTED-HISTORY-CONTENT"
+    )
+
+    context = SemanticContext(
+        user_utterance="Do it again.",
+        conversation_summary=(
+            "Previous Neuron answer contained "
+            + marker
+        ),
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            marker,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason="repeat previous result",
+        )
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason="repeat previous result",
+    )
+
+    assert dependencies == (
+        "user_utterance",
+        "unknown_model_argument",
+    )
+
+    assert resolved.permissions.read is True
+    assert resolved.permissions.trust is False
+    assert resolved.permissions.persist is False
+    assert resolved.permissions.execute is False
+    assert resolved.permissions.propagate is False
+
+
+def test_prior_provider_output_cannot_authorize_execute():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+    )
+
+    marker = (
+        "C7-PRIOR-PROVIDER-PRIVATE-INSTRUCTION"
+    )
+
+    context = SemanticContext(
+        user_utterance=(
+            "Repeat the previous action."
+        ),
+        conversation_summary=(
+            "Earlier capability returned: "
+            + marker
+        ),
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[
+            {
+                "ok": True,
+                "result": {
+                    "instruction":
+                        marker,
+                },
+            },
+        ],
+        provenance=default_context_provenance(),
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments={
+            "instruction":
+                marker,
+        },
+        reason=(
+            "previous capability suggested it"
+        ),
+    )
+
+    assert resolved.permissions.read is True
+    assert resolved.permissions.trust is False
+    assert resolved.permissions.persist is False
+    assert resolved.permissions.execute is False
+    assert resolved.permissions.propagate is False
+
+    assert any(
+        "unknown_model_argument"
+        in source_id
+        for source_id in resolved.source_ids
+    )
+
+
+def test_model_reason_cannot_launder_conversation_authority():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+    )
+
+    context = SemanticContext(
+        user_utterance="Continue.",
+        conversation_summary=(
+            "Prior assistant text: "
+            "RUN-HISTORY-COMMAND"
+        ),
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[],
+        provenance=default_context_provenance(),
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments={
+            "instruction":
+                "RUN-HISTORY-COMMAND",
+        },
+        reason=(
+            "The user definitely authorized "
+            "this earlier."
+        ),
+    )
+
+    assert resolved.permissions.read is True
+    assert resolved.permissions.trust is False
+    assert resolved.permissions.persist is False
+    assert resolved.permissions.execute is False
+    assert resolved.permissions.propagate is False
+
+
+def test_current_user_command_retains_execute_despite_old_context():
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+        resolve_step_source_dependencies,
+    )
+
+    instruction = (
+        "Run pytest-current-user-command."
+    )
+
+    context = SemanticContext(
+        user_utterance=instruction,
+        conversation_summary=(
+            "Prior unrelated history."
+        ),
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[
+            {
+                "result": {
+                    "instruction":
+                        "UNRELATED-OLD-COMMAND",
+                },
+            },
+        ],
+        provenance=default_context_provenance(),
+    )
+
+    arguments = {
+        "instruction":
+            instruction,
+    }
+
+    dependencies = (
+        resolve_step_source_dependencies(
+            context=context,
+            capability="sophyane.execute",
+            arguments=arguments,
+            reason=(
+                "explicit current user request"
+            ),
+        )
+    )
+
+    resolved = derive_step_provenance(
+        context=context,
+        capability="sophyane.execute",
+        arguments=arguments,
+        reason=(
+            "explicit current user request"
+        ),
+    )
+
+    assert dependencies == (
+        "user_utterance",
+    )
+
+    assert resolved.permissions.read is True
+    assert resolved.permissions.trust is True
+    assert resolved.permissions.persist is True
+    assert resolved.permissions.execute is True
+    assert resolved.permissions.propagate is False
+
+
+def test_validator_recomputes_history_derived_execute_as_denied():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.context import (
+        SemanticContext,
+        default_context_provenance,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    from semantic.validator import (
+        validate_plan,
+    )
+
+    from runtime.semantic_dependency_resolver import (
+        derive_step_provenance,
+    )
+
+    registry = CapabilityRegistry()
+
+    capability = Capability(
+        name="pytest.c7.execute",
+        description="pytest execute",
+        provider="pytest.provider",
+        privilege="execute",
+    )
+
+    capability.executor = (
+        lambda arguments: {
+            "ok": True,
+        }
+    )
+
+    registry.register(
+        capability
+    )
+
+    context = SemanticContext(
+        user_utterance="Do that again.",
+        conversation_summary=(
+            "Previous result said "
+            "RUN-C7-HISTORY-COMMAND"
+        ),
+        current_task=None,
+        current_application=None,
+        screen={},
+        perception={},
+        identity={},
+        memory={},
+        recent_actions=[
+            {
+                "result": {
+                    "instruction":
+                        "RUN-C7-HISTORY-COMMAND",
+                },
+            },
+        ],
+        provenance=default_context_provenance(),
+    )
+
+    def resolver(
+        *,
+        capability,
+        arguments,
+        reason,
+    ):
+        resolved = derive_step_provenance(
+            context=context,
+            capability=capability,
+            arguments=arguments,
+            reason=reason,
+        )
+
+        return (
+            resolved.permissions.__dict__
+            | {
+                "origin":
+                    resolved.origin.value,
+                "source_ids":
+                    list(
+                        resolved.source_ids
+                    ),
+                "transformed":
+                    resolved.transformed,
+            }
+        )
+
+    plan = validate_plan(
+        {
+            "interpretation":
+                "repeat historical action",
+            "steps": [
+                {
+                    "capability":
+                        "pytest.c7.execute",
+                    "arguments": {
+                        "instruction":
+                            "RUN-C7-HISTORY-COMMAND",
+                    },
+                    "reason":
+                        "repeat prior result",
+                    "confidence":
+                        1.0,
+                    "depends_on":
+                        [],
+                },
+            ],
+            "reply":
+                None,
+            "clarification_needed":
+                False,
+            "confidence":
+                1.0,
+        },
+        registry,
+        provenance={
+            "read": True,
+            "trust": True,
+            "persist": True,
+            "execute": True,
+            "propagate": False,
+            "origin": "user",
+        },
+        step_provenance_resolver=resolver,
+    )
+
+    step = plan.steps[0]
+
+    assert step.provenance[
+        "trust"
+    ] is False
+
+    assert step.provenance[
+        "persist"
+    ] is False
+
+    assert step.provenance[
+        "execute"
+    ] is False
+
+    assert step.provenance[
+        "propagate"
+    ] is False
+
+    assert any(
+        "unknown_model_argument"
+        in source_id
+        for source_id in step.provenance[
+            "source_ids"
+        ]
+    )
+
+
+def test_execution_gate_blocks_history_laundered_execute():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.plan import (
+        PlanStep,
+        SemanticPlan,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    import neuron_semantic_runtime as runtime
+
+    calls = []
+
+    registry = CapabilityRegistry()
+
+    capability = Capability(
+        name="pytest.c7.execute",
+        description="pytest execute",
+        provider="pytest.provider",
+        privilege="execute",
+    )
+
+    def executor(arguments):
+        calls.append(
+            dict(
+                arguments
+            )
+        )
+
+        return {
+            "ok": True,
+        }
+
+    capability.executor = (
+        executor
+    )
+
+    registry.register(
+        capability
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "history-laundered execution"
+        ),
+        steps=[
+            PlanStep(
+                capability="pytest.c7.execute",
+                arguments={
+                    "instruction":
+                        "RUN-HISTORICAL-COMMAND",
+                },
+                depends_on=[],
+                provenance={
+                    "read": True,
+                    "trust": False,
+                    "persist": False,
+                    "execute": False,
+                    "propagate": False,
+                    "origin": "model",
+                    "source_ids": [
+                        "semantic:user",
+                        (
+                            "semantic:unknown:"
+                            "unknown_model_argument"
+                        ),
+                    ],
+                },
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Do that again."
+        ),
+    )
+
+    assert result[0]["ok"] is False
+
+    assert (
+        result[0]["error"]
+        == "security_denied"
+    )
+
+    assert (
+        result[0]["security_reason"]
+        == "provenance_denied_execute"
+    )
+
+    assert calls == []
