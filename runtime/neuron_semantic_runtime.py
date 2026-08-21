@@ -1350,6 +1350,66 @@ def _execute_plan(
     for index, step in enumerate(
         plan.steps
     ):
+        dependencies = list(
+            getattr(
+                step,
+                "depends_on",
+                [],
+            )
+            or []
+        )
+
+        failed_dependencies = []
+
+        for dependency in dependencies:
+            if (
+                dependency < 0
+                or dependency >= len(
+                    results
+                )
+            ):
+                failed_dependencies.append(
+                    dependency
+                )
+
+                continue
+
+            if not bool(
+                results[
+                    dependency
+                ].get(
+                    "ok"
+                )
+            ):
+                failed_dependencies.append(
+                    dependency
+                )
+
+        if failed_dependencies:
+            results.append(
+                {
+                    "step":
+                        index,
+
+                    "ok":
+                        False,
+
+                    "capability":
+                        step.capability,
+
+                    "error":
+                        "dependency_failed",
+
+                    "status":
+                        "skipped",
+
+                    "failed_dependencies":
+                        failed_dependencies,
+                }
+            )
+
+            continue
+
         capability = registry.get(
             step.capability
         )

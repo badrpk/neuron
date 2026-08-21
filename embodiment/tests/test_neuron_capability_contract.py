@@ -1312,3 +1312,818 @@ def test_failed_execution_formatter_handles_security_denial():
         "security_denied"
         in answer
     )
+
+
+def _pytest_read_provenance():
+    return {
+        "read": True,
+        "trust": True,
+        "persist": False,
+        "execute": False,
+        "propagate": False,
+        "origin": "user",
+    }
+
+
+def test_failed_dependency_blocks_dependent_executor():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    calls = []
+
+    registry = CapabilityRegistry()
+
+    prerequisite = Capability(
+        name="pytest.prerequisite",
+        description="pytest prerequisite",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    def prerequisite_executor(arguments):
+        del arguments
+
+        calls.append(
+            "prerequisite"
+        )
+
+        return {
+            "ok": False,
+            "error":
+                "pytest prerequisite failed",
+        }
+
+    prerequisite.executor = (
+        prerequisite_executor
+    )
+
+    registry.register(
+        prerequisite
+    )
+
+    dependent = Capability(
+        name="pytest.dependent",
+        description="pytest dependent",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    def dependent_executor(arguments):
+        del arguments
+
+        calls.append(
+            "dependent"
+        )
+
+        return {
+            "ok": True,
+            "value":
+                "must never execute",
+        }
+
+    dependent.executor = (
+        dependent_executor
+    )
+
+    registry.register(
+        dependent
+    )
+
+    provenance = (
+        _pytest_read_provenance()
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "pytest failed dependency"
+        ),
+        steps=[
+            PlanStep(
+                capability=(
+                    "pytest.prerequisite"
+                ),
+                arguments={},
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+            PlanStep(
+                capability=(
+                    "pytest.dependent"
+                ),
+                arguments={},
+                depends_on=[
+                    0,
+                ],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Run prerequisite and "
+            "dependent pytest steps."
+        ),
+    )
+
+    assert calls == [
+        "prerequisite",
+    ]
+
+    assert len(result) == 2
+
+    assert result[0]["ok"] is False
+    assert result[1]["ok"] is False
+
+    assert (
+        result[1]["error"]
+        == "dependency_failed"
+    )
+
+    assert (
+        result[1]["status"]
+        == "skipped"
+    )
+
+    assert (
+        result[1][
+            "failed_dependencies"
+        ]
+        == [
+            0,
+        ]
+    )
+
+
+def test_successful_dependency_allows_dependent_executor():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    calls = []
+
+    registry = CapabilityRegistry()
+
+    prerequisite = Capability(
+        name="pytest.prerequisite",
+        description="pytest prerequisite",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    def prerequisite_executor(arguments):
+        del arguments
+
+        calls.append(
+            "prerequisite"
+        )
+
+        return {
+            "ok": True,
+            "value":
+                "prerequisite succeeded",
+        }
+
+    prerequisite.executor = (
+        prerequisite_executor
+    )
+
+    registry.register(
+        prerequisite
+    )
+
+    dependent = Capability(
+        name="pytest.dependent",
+        description="pytest dependent",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    def dependent_executor(arguments):
+        del arguments
+
+        calls.append(
+            "dependent"
+        )
+
+        return {
+            "ok": True,
+            "value":
+                "dependent succeeded",
+        }
+
+    dependent.executor = (
+        dependent_executor
+    )
+
+    registry.register(
+        dependent
+    )
+
+    provenance = (
+        _pytest_read_provenance()
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "pytest successful dependency"
+        ),
+        steps=[
+            PlanStep(
+                capability=(
+                    "pytest.prerequisite"
+                ),
+                arguments={},
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+            PlanStep(
+                capability=(
+                    "pytest.dependent"
+                ),
+                arguments={},
+                depends_on=[
+                    0,
+                ],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Run prerequisite and "
+            "dependent pytest steps."
+        ),
+    )
+
+    assert calls == [
+        "prerequisite",
+        "dependent",
+    ]
+
+    assert len(result) == 2
+
+    assert result[0]["ok"] is True
+    assert result[1]["ok"] is True
+
+
+def test_independent_sibling_runs_after_other_step_failure():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    calls = []
+
+    registry = CapabilityRegistry()
+
+    first = Capability(
+        name="pytest.first",
+        description="pytest first",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    def first_executor(arguments):
+        del arguments
+
+        calls.append(
+            "first"
+        )
+
+        return {
+            "ok": False,
+            "error":
+                "pytest first failed",
+        }
+
+    first.executor = (
+        first_executor
+    )
+
+    registry.register(
+        first
+    )
+
+    sibling = Capability(
+        name="pytest.sibling",
+        description="pytest sibling",
+        provider="pytest.provider",
+        privilege="read",
+    )
+
+    def sibling_executor(arguments):
+        del arguments
+
+        calls.append(
+            "sibling"
+        )
+
+        return {
+            "ok": True,
+            "value":
+                "sibling succeeded",
+        }
+
+    sibling.executor = (
+        sibling_executor
+    )
+
+    registry.register(
+        sibling
+    )
+
+    provenance = (
+        _pytest_read_provenance()
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "pytest independent siblings"
+        ),
+        steps=[
+            PlanStep(
+                capability="pytest.first",
+                arguments={},
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+            PlanStep(
+                capability="pytest.sibling",
+                arguments={},
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Run independent pytest steps."
+        ),
+    )
+
+    assert calls == [
+        "first",
+        "sibling",
+    ]
+
+    assert result[0]["ok"] is False
+    assert result[1]["ok"] is True
+
+
+def test_any_failed_dependency_blocks_multi_dependency_step():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    calls = []
+
+    registry = CapabilityRegistry()
+
+    def register(
+        name,
+        *,
+        ok,
+    ):
+        capability = Capability(
+            name=name,
+            description=name,
+            provider="pytest.provider",
+            privilege="read",
+        )
+
+        def executor(arguments):
+            del arguments
+
+            calls.append(
+                name
+            )
+
+            return {
+                "ok": ok,
+                "error":
+                    (
+                        ""
+                        if ok
+                        else f"{name} failed"
+                    ),
+            }
+
+        capability.executor = (
+            executor
+        )
+
+        registry.register(
+            capability
+        )
+
+    register(
+        "pytest.a",
+        ok=True,
+    )
+
+    register(
+        "pytest.b",
+        ok=False,
+    )
+
+    register(
+        "pytest.c",
+        ok=True,
+    )
+
+    provenance = (
+        _pytest_read_provenance()
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "pytest multiple dependencies"
+        ),
+        steps=[
+            PlanStep(
+                capability="pytest.a",
+                arguments={},
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+            PlanStep(
+                capability="pytest.b",
+                arguments={},
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+            PlanStep(
+                capability="pytest.c",
+                arguments={},
+                depends_on=[
+                    0,
+                    1,
+                ],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Run pytest dependency graph."
+        ),
+    )
+
+    assert calls == [
+        "pytest.a",
+        "pytest.b",
+    ]
+
+    assert result[0]["ok"] is True
+    assert result[1]["ok"] is False
+
+    assert result[2]["ok"] is False
+
+    assert (
+        result[2]["error"]
+        == "dependency_failed"
+    )
+
+    assert (
+        result[2]["status"]
+        == "skipped"
+    )
+
+    assert (
+        result[2][
+            "failed_dependencies"
+        ]
+        == [
+            1,
+        ]
+    )
+
+
+def test_dependency_failure_propagates_transitively():
+    from semantic.capability import (
+        Capability,
+    )
+
+    from semantic.registry import (
+        CapabilityRegistry,
+    )
+
+    calls = []
+
+    registry = CapabilityRegistry()
+
+    def register(
+        name,
+        *,
+        ok,
+    ):
+        capability = Capability(
+            name=name,
+            description=name,
+            provider="pytest.provider",
+            privilege="read",
+        )
+
+        def executor(arguments):
+            del arguments
+
+            calls.append(
+                name
+            )
+
+            return {
+                "ok": ok,
+                "error":
+                    (
+                        ""
+                        if ok
+                        else f"{name} failed"
+                    ),
+            }
+
+        capability.executor = (
+            executor
+        )
+
+        registry.register(
+            capability
+        )
+
+    register(
+        "pytest.root",
+        ok=False,
+    )
+
+    register(
+        "pytest.child",
+        ok=True,
+    )
+
+    register(
+        "pytest.grandchild",
+        ok=True,
+    )
+
+    provenance = (
+        _pytest_read_provenance()
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "pytest transitive dependency failure"
+        ),
+        steps=[
+            PlanStep(
+                capability="pytest.root",
+                arguments={},
+                depends_on=[],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+            PlanStep(
+                capability="pytest.child",
+                arguments={},
+                depends_on=[
+                    0,
+                ],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+            PlanStep(
+                capability="pytest.grandchild",
+                arguments={},
+                depends_on=[
+                    1,
+                ],
+                provenance=dict(
+                    provenance
+                ),
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "Run transitive pytest dependencies."
+        ),
+    )
+
+    assert calls == [
+        "pytest.root",
+    ]
+
+    assert result[0]["ok"] is False
+
+    assert (
+        result[1]["error"]
+        == "dependency_failed"
+    )
+
+    assert (
+        result[1]["failed_dependencies"]
+        == [
+            0,
+        ]
+    )
+
+    assert (
+        result[2]["error"]
+        == "dependency_failed"
+    )
+
+    assert (
+        result[2]["failed_dependencies"]
+        == [
+            1,
+        ]
+    )
+
+
+def test_dependency_failure_answer_reports_skipped_step():
+    execution = [
+        {
+            "step": 0,
+            "ok": False,
+            "capability":
+                "pytest.prerequisite",
+            "provider":
+                "pytest.provider",
+            "result": {
+                "ok": False,
+                "error":
+                    "pytest prerequisite failed",
+            },
+        },
+        {
+            "step": 1,
+            "ok": False,
+            "capability":
+                "pytest.dependent",
+            "error":
+                "dependency_failed",
+            "status":
+                "skipped",
+            "failed_dependencies": [
+                0,
+            ],
+        },
+    ]
+
+    answer = (
+        runtime._failed_execution_answer(
+            execution
+        )
+    )
+
+    assert (
+        "pytest prerequisite failed"
+        in answer
+    )
+
+    assert (
+        "pytest.dependent"
+        in answer
+    )
+
+    assert (
+        "dependency_failed"
+        in answer
+    )
+
+
+def test_dependency_gate_runs_before_capability_lookup():
+    registry = runtime._build_registry(
+        workspace=ROOT,
+        sophyane_executable=None,
+        session_environment={},
+    )
+
+    context = _context(
+        text="What time is it?"
+    )
+
+    provenance = (
+        derive_step_provenance(
+            context=context,
+            capability="system.clock",
+            arguments={},
+        )
+    )
+
+    plan = SemanticPlan(
+        interpretation=(
+            "pytest dependency gate ordering"
+        ),
+        steps=[
+            PlanStep(
+                capability=(
+                    "missing.pytest.capability"
+                ),
+                arguments={},
+                depends_on=[],
+                provenance={
+                    "read": True,
+                    "trust": True,
+                    "persist": False,
+                    "execute": False,
+                    "propagate": False,
+                    "origin": "user",
+                },
+            ),
+            PlanStep(
+                capability="system.clock",
+                arguments={},
+                depends_on=[
+                    0,
+                ],
+                provenance={
+                    **provenance
+                    .permissions
+                    .__dict__,
+                    "origin":
+                        provenance.origin.value,
+                },
+            ),
+        ],
+        reply=None,
+    )
+
+    result = runtime._execute_plan(
+        plan=plan,
+        registry=registry,
+        original_user_text=(
+            "What time is it?"
+        ),
+    )
+
+    assert len(result) == 2
+
+    assert (
+        result[0]["error"]
+        == "capability unavailable"
+    )
+
+    assert (
+        result[1]["error"]
+        == "dependency_failed"
+    )
+
+    assert (
+        result[1]["status"]
+        == "skipped"
+    )
